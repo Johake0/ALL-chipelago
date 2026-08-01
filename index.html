@@ -8,14 +8,14 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --deep-water: #0C8C00;
-    --deep-water-2: #184D13;
-    --parchment: #FF46A2;
+    --deep-water: #031d00;
+    --deep-water-2: #000000;
+    --parchment: #ffd8fa;
     --parchment-2: #FF46A2;
-    --ink: #8C0057;
+    --ink: #000000;
     --rust: #C1502E;
-    --teal: #3E8E7E;
-    --gold: #C9A227;
+    --teal: #004268;
+    --gold: #000000;
     --line: rgba(241, 230, 204, 0.18);
   }
 
@@ -23,7 +23,7 @@
 
   body {
     margin: 0;
-    background: radial-gradient(ellipse at top, #4CBB17 0%, var(--deep-water) 45%, var(--deep-water-2) 100%);
+    background: radial-gradient(circle at bottom, #001100 0%, var(--deep-water) 0%, var(--deep-water-2) 100%);
     color: var(--parchment);
     font-family: 'Inter', sans-serif;
     min-height: 100vh;
@@ -84,19 +84,19 @@
 
   .wheel-stage {
     position: relative;
-    width: min(1800px, 80vw);
-    height: min(1800px, 80vw);
+    width: min(1000px, 80vw);
+    height: min(1000px, 80vw);
   }
 
   .wheel-pointer {
     position: absolute;
-    top: -14px;
+    top: 14px;
     left: 50%;
     transform: translateX(-50%);
     width: 0; height: 0;
     border-left: 14px solid transparent;
     border-right: 14px solid transparent;
-    border-top: 22px solid var(--gold);
+    border-top: 22px solid #2b5228;
     z-index: 5;
     filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4));
   }
@@ -118,11 +118,11 @@
     left: 50%;
     transform-origin: 0 0;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--deep-water-2);
+    font-size: 23px;
+    font-weight: 100;
+    color: #37122900;
     white-space: nowrap;
-    max-width: 120px;
+    max-width: 2000px;
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -139,6 +139,34 @@
     display: flex; align-items: center; justify-content: center;
     font-family: 'Fraunces', serif;
     font-size: 20px;
+  }
+
+  /* Result Box Styles */
+  .result-box {
+    margin-top: 10px;
+    background: var(--deep-water-2);
+    border: 2px solid var(--teal);
+    color: var(--parchment);
+    padding: 16px 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 20px;
+    font-weight: 600;
+    border-radius: 12px;
+    min-width: 260px;
+    text-align: center;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    min-height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+  }
+
+  .result-box.highlight {
+    border-color: var(--rust);
+    color: var(--parchment-2);
+    transform: scale(1.05);
+    box-shadow: 0 8px 30px rgba(193, 80, 46, 0.4);
   }
 
   select, button {
@@ -182,19 +210,18 @@
   .status-msg {
     font-family: 'JetBrains Mono', monospace;
     font-size: 13px;
-    color: var(--gold);
+    color: var(--parchment);
     min-height: 18px;
     text-align: center;
   }
 
-  /* --- Crew & Pool grid --- */
-  .grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+  /* --- Crew & Pool layout --- */
+  .panels-stack {
+    display: flex;
+    flex-direction: column;
     gap: 24px;
     margin-top: 44px;
   }
-  @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
 
   .panel {
     background: var(--parchment);
@@ -237,12 +264,20 @@
     letter-spacing: 0.08em;
   }
 
+  /* Uncharted Games Grid */
+  #gamesList {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 4px 14px;
+  }
+
   .island-pill {
     display: inline-block;
     background: var(--deep-water);
     color: var(--parchment);
-    border-radius: 60% 40% 55% 45% / 50% 55% 45% 50%;
-    padding: 3px 12px;
+    border-radius: 50px;
+    padding: 7px 15px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
   }
@@ -300,6 +335,8 @@
         <div class="wheel-hub">⛵</div>
       </div>
     </div>
+    
+    <div class="result-box" id="resultBox">Spin Me!!</div>
 
     <button class="spin-btn" id="spinBtn">Spin the Wheel</button>
     <div class="status-msg" id="statusMsg"></div>
@@ -307,7 +344,7 @@
 
   <div class="voyage-line"><span>SHIP'S LOG</span></div>
 
-  <div class="grid">
+  <div class="panels-stack">
     <div class="panel">
       <h2>🧭 The Crew</h2>
       <div id="playersList"></div>
@@ -329,6 +366,7 @@ const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx6LMVOjW8obosE
 const wheelDisc = document.getElementById('wheelDisc');
 const spinBtn = document.getElementById('spinBtn');
 const statusMsg = document.getElementById('statusMsg');
+const resultBox = document.getElementById('resultBox');
 const playerSelect = document.getElementById('playerSelect');
 const playersList = document.getElementById('playersList');
 const gamesList = document.getElementById('gamesList');
@@ -415,10 +453,10 @@ function renderPlayers(players) {
 function renderGames(games) {
   gamesList.innerHTML = '';
   games.forEach(name => {
-    const row = document.createElement('div');
-    row.className = 'card-row';
-    row.innerHTML = `<span class="island-pill">${name}</span>`;
-    gamesList.appendChild(row);
+    const pill = document.createElement('span');
+    pill.className = 'island-pill';
+    pill.textContent = name;
+    gamesList.appendChild(pill);
   });
 }
 
@@ -435,6 +473,7 @@ async function handleSpin() {
   if (!player) return;
   spinBtn.disabled = true;
   statusMsg.textContent = 'Casting off...';
+  resultBox.classList.remove('highlight');
 
   const result = await postAction('spin', player);
   if (result.error) {
@@ -442,6 +481,15 @@ async function handleSpin() {
     spinBtn.disabled = false;
     return;
   }
+
+  // Create rapid-changing effect on the resultBox while spinning
+  const spinDurationMs = 4600;
+  const flickerInterval = setInterval(() => {
+    if (lastSegments.length > 0) {
+      const randomIdx = Math.floor(Math.random() * lastSegments.length);
+      resultBox.textContent = lastSegments[randomIdx];
+    }
+  }, 80);
 
   // Animate the wheel to land on the winner, using the segment layout
   // that was on screen at the moment of the spin.
@@ -453,6 +501,11 @@ async function handleSpin() {
   wheelDisc.style.transform = `rotate(${currentRotation}deg)`;
 
   setTimeout(() => {
+    // Stop cycling text and show the actual winner
+    clearInterval(flickerInterval);
+    resultBox.textContent = result.winner;
+    resultBox.classList.add('highlight');
+    
     statusMsg.textContent = `${player} is now playing ${result.winner}!`;
     renderPlayers(result.players);
     renderGames(result.games);
@@ -465,7 +518,7 @@ async function handleSpin() {
     }).join(', ');
     if (lastSegments.length) wheelDisc.style.background = `conic-gradient(${stops})`;
     spinBtn.disabled = false;
-  }, 4600);
+  }, spinDurationMs);
 }
 
 async function handleComplete(player) {
