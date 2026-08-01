@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Chart &mdash; Archipelago Randomizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --deep-water: #16283A;
+    --deep-water-2: #0F1D2B;
+    --parchment: #F1E6CC;
+    --parchment-2: #E6D8B4;
+    --ink: #1F2A2E;
+    --rust: #C1502E;
+    --teal: #3E8E7E;
+    --gold: #C9A227;
+    --line: rgba(241, 230, 204, 0.18);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: radial-gradient(ellipse at top, #1C3245 0%, var(--deep-water) 45%, var(--deep-water-2) 100%);
+    color: var(--parchment);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    padding: 40px 20px 80px;
+  }
+
+  .wrap { max-width: 980px; margin: 0 auto; }
+
+  header { text-align: center; margin-bottom: 8px; }
+
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    font-size: 12px;
+    color: var(--teal);
+  }
+
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-optical-sizing: auto;
+    font-weight: 700;
+    font-size: clamp(36px, 6vw, 58px);
+    margin: 6px 0 4px;
+    letter-spacing: -0.01em;
+  }
+
+  .subhead {
+    color: var(--parchment-2);
+    font-size: 15px;
+    max-width: 520px;
+    margin: 0 auto;
+    opacity: 0.85;
+  }
+
+  .voyage-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 36px 0;
+    color: var(--parchment-2);
+    opacity: 0.6;
+  }
+  .voyage-line::before, .voyage-line::after {
+    content: '';
+    flex: 1;
+    border-top: 2px dotted var(--parchment-2);
+  }
+  .voyage-line span { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.15em; }
+
+  /* --- Wheel section --- */
+  .helm {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 22px;
+  }
+
+  .wheel-stage {
+    position: relative;
+    width: min(360px, 80vw);
+    height: min(360px, 80vw);
+  }
+
+  .wheel-pointer {
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 14px solid transparent;
+    border-right: 14px solid transparent;
+    border-top: 22px solid var(--gold);
+    z-index: 5;
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4));
+  }
+
+  .wheel-disc {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    position: relative;
+    border: 6px solid var(--gold);
+    box-shadow: 0 0 0 3px var(--deep-water-2), 0 20px 40px rgba(0,0,0,0.45);
+    transition: transform 4.5s cubic-bezier(0.12, 0.72, 0.15, 1);
+    overflow: hidden;
+  }
+
+  .wheel-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform-origin: 0 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--deep-water-2);
+    white-space: nowrap;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .wheel-hub {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 46px; height: 46px;
+    background: var(--deep-water-2);
+    border: 4px solid var(--gold);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 4;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Fraunces', serif;
+    font-size: 20px;
+  }
+
+  select, button {
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    padding: 10px 16px;
+  }
+
+  select {
+    background: var(--deep-water-2);
+    color: var(--parchment);
+  }
+
+  .spin-btn {
+    background: var(--rust);
+    color: var(--parchment);
+    border: none;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    padding: 12px 28px;
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+  .spin-btn:hover:not(:disabled) { transform: translateY(-1px); background: #A8452A; }
+  .spin-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .finish-btn {
+    background: var(--teal);
+    color: var(--deep-water-2);
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 6px 14px;
+    font-size: 12px;
+    border-radius: 6px;
+  }
+  .finish-btn:hover { filter: brightness(1.1); }
+
+  .status-msg {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--gold);
+    min-height: 18px;
+    text-align: center;
+  }
+
+  /* --- Crew & Pool grid --- */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-top: 44px;
+  }
+  @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--parchment);
+    color: var(--ink);
+    border-radius: 18px;
+    padding: 22px 22px 8px;
+    box-shadow: 0 14px 30px rgba(0,0,0,0.35);
+  }
+
+  .panel h2 {
+    font-family: 'Fraunces', serif;
+    font-size: 20px;
+    margin: 0 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 4px;
+    border-bottom: 1px dashed rgba(31,42,46,0.18);
+    gap: 10px;
+  }
+  .card-row:last-child { border-bottom: none; }
+
+  .player-name { font-weight: 600; }
+  .player-game {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    opacity: 0.75;
+  }
+  .idle-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--teal);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .island-pill {
+    display: inline-block;
+    background: var(--deep-water);
+    color: var(--parchment);
+    border-radius: 60% 40% 55% 45% / 50% 55% 45% 50%;
+    padding: 3px 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
+
+  .copies-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    opacity: 0.6;
+  }
+
+  footer {
+    text-align: center;
+    margin-top: 60px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--parchment-2);
+    opacity: 0.5;
+  }
+
+  #configWarning {
+    background: var(--rust);
+    color: var(--parchment);
+    padding: 12px 18px;
+    border-radius: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    text-align: center;
+    max-width: 600px;
+    margin: 0 auto 24px;
+    display: none;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="configWarning">
+    ⚠ Set APPS_SCRIPT_URL at the top of the &lt;script&gt; tag in index.html to your deployed Apps Script web app URL.
+  </div>
+
+  <header>
+    <div class="eyebrow">Collective Voyage Log</div>
+    <h1>The Chart</h1>
+    <p class="subhead">Spin to chart your next island. Once you land, the crossing is yours to finish.</p>
+  </header>
+
+  <div class="voyage-line"><span>THE HELM</span></div>
+
+  <div class="helm">
+    <select id="playerSelect"></select>
+
+    <div class="wheel-stage">
+      <div class="wheel-pointer"></div>
+      <div class="wheel-disc" id="wheelDisc">
+        <div class="wheel-hub">⛵</div>
+      </div>
+    </div>
+
+    <button class="spin-btn" id="spinBtn">Spin the Wheel</button>
+    <div class="status-msg" id="statusMsg"></div>
+  </div>
+
+  <div class="voyage-line"><span>SHIP'S LOG</span></div>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>🧭 The Crew</h2>
+      <div id="playersList"></div>
+    </div>
+    <div class="panel">
+      <h2>🏝️ Uncharted Games</h2>
+      <div id="gamesList"></div>
+    </div>
+  </div>
+
+  <footer>Archipelago Randomizer &middot; state lives in your Google Sheet</footer>
+</div>
+
+<script>
+/* ===================== CONFIG ===================== */
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx6LMVOjW8obosE24WS5ecYDeo1LR-Uo3gKmPMcwMpEP6ScDW9wwrgIlT6zKj6rmqZtQw/exec";
+/* ==================================================== */
+
+const wheelDisc = document.getElementById('wheelDisc');
+const spinBtn = document.getElementById('spinBtn');
+const statusMsg = document.getElementById('statusMsg');
+const playerSelect = document.getElementById('playerSelect');
+const playersList = document.getElementById('playersList');
+const gamesList = document.getElementById('gamesList');
+
+const SEGMENT_COLORS = ['#3E8E7E', '#C1502E', '#C9A227', '#8C6E4B'];
+let currentRotation = 0;
+let lastSegments = []; // names shown on the wheel at the moment of the last spin
+
+if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL.indexOf('PASTE_') === 0) {
+  document.getElementById('configWarning').style.display = 'block';
+}
+
+async function fetchState() {
+  const res = await fetch(APPS_SCRIPT_URL + '?action=state');
+  return res.json();
+}
+
+async function postAction(action, player) {
+  const res = await fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // avoids CORS preflight on Apps Script
+    body: JSON.stringify({ action, player })
+  });
+  return res.json();
+}
+
+function distinctAvailableGames(games) {
+  return games; // already just an array of available game names
+}
+
+function renderWheel(names) {
+  lastSegments = names;
+  wheelDisc.querySelectorAll('.wheel-label').forEach(el => el.remove());
+
+  if (names.length === 0) {
+    wheelDisc.style.background = 'var(--deep-water-2)';
+    return;
+  }
+
+  const segAngle = 360 / names.length;
+  const stops = names.map((_, i) => {
+    const color = SEGMENT_COLORS[i % SEGMENT_COLORS.length];
+    const start = i * segAngle;
+    const end = start + segAngle;
+    return `${color} ${start}deg ${end}deg`;
+  }).join(', ');
+  wheelDisc.style.background = `conic-gradient(${stops})`;
+
+  names.forEach((name, i) => {
+    const mid = i * segAngle + segAngle / 2;
+    const label = document.createElement('div');
+    label.className = 'wheel-label';
+    label.textContent = name;
+    label.style.transform = `rotate(${mid}deg) translate(38px, -6px)`;
+    wheelDisc.appendChild(label);
+  });
+}
+
+function renderPlayers(players) {
+  playersList.innerHTML = '';
+  players.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'card-row';
+    row.innerHTML = `
+      <div>
+        <div class="player-name">${p.name}</div>
+        ${p.currentGame ? `<div class="player-game">sailing to <strong>${p.currentGame}</strong></div>` : `<span class="idle-tag">idle at port</span>`}
+        <div class="player-game">🪙 ${p.coins} &nbsp; streak ${p.streak} (best ${p.longestStreak}) &nbsp; 🔁${p.rerolls}</div>
+      </div>
+      ${p.currentGame ? `<button class="finish-btn" data-player="${p.name}">Mark Finished</button>` : ''}
+    `;
+    playersList.appendChild(row);
+  });
+  playersList.querySelectorAll('.finish-btn').forEach(btn => {
+    btn.addEventListener('click', () => handleComplete(btn.dataset.player));
+  });
+
+  // Keep the player select in sync
+  const prevSelection = playerSelect.value;
+  playerSelect.innerHTML = players.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
+  if (players.some(p => p.name === prevSelection)) playerSelect.value = prevSelection;
+}
+
+function renderGames(games) {
+  gamesList.innerHTML = '';
+  games.forEach(name => {
+    const row = document.createElement('div');
+    row.className = 'card-row';
+    row.innerHTML = `<span class="island-pill">${name}</span>`;
+    gamesList.appendChild(row);
+  });
+}
+
+async function refresh() {
+  const state = await fetchState();
+  if (state.error) { statusMsg.textContent = state.error; return; }
+  renderPlayers(state.players);
+  renderGames(state.games);
+  renderWheel(distinctAvailableGames(state.games));
+}
+
+async function handleSpin() {
+  const player = playerSelect.value;
+  if (!player) return;
+  spinBtn.disabled = true;
+  statusMsg.textContent = 'Casting off...';
+
+  const result = await postAction('spin', player);
+  if (result.error) {
+    statusMsg.textContent = result.error;
+    spinBtn.disabled = false;
+    return;
+  }
+
+  // Animate the wheel to land on the winner, using the segment layout
+  // that was on screen at the moment of the spin.
+  const winnerIndex = lastSegments.indexOf(result.winner);
+  const segAngle = 360 / lastSegments.length;
+  const targetAngle = winnerIndex >= 0 ? (winnerIndex * segAngle + segAngle / 2) : 0;
+  const spins = 5; // full rotations for effect
+  currentRotation += spins * 360 + (360 - targetAngle) - (currentRotation % 360);
+  wheelDisc.style.transform = `rotate(${currentRotation}deg)`;
+
+  setTimeout(() => {
+    statusMsg.textContent = `${player} is now playing ${result.winner}!`;
+    renderPlayers(result.players);
+    renderGames(result.games);
+    // Re-render the wheel to reflect the post-spin pool, but don't reset rotation
+    lastSegments = distinctAvailableGames(result.games);
+    const segAngleNew = lastSegments.length ? 360 / lastSegments.length : 0;
+    const stops = lastSegments.map((_, i) => {
+      const color = SEGMENT_COLORS[i % SEGMENT_COLORS.length];
+      return `${color} ${i * segAngleNew}deg ${(i + 1) * segAngleNew}deg`;
+    }).join(', ');
+    if (lastSegments.length) wheelDisc.style.background = `conic-gradient(${stops})`;
+    spinBtn.disabled = false;
+  }, 4600);
+}
+
+async function handleComplete(player) {
+  statusMsg.textContent = `Logging ${player}'s crossing as complete...`;
+  const result = await postAction('complete', player);
+  if (result.error) { statusMsg.textContent = result.error; return; }
+  statusMsg.textContent = `${player} reached the island. Well sailed!`;
+  renderPlayers(result.players);
+  renderGames(result.games);
+}
+
+spinBtn.addEventListener('click', handleSpin);
+refresh();
+setInterval(refresh, 15000); // light polling so everyone's screen stays roughly in sync
+</script>
+</body>
+</html>
