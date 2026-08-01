@@ -8,14 +8,13 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --deep-water: #031d00;
-    --deep-water-2: #000000;
-    --parchment: #ffd8fa;
-    --parchment-2: #FF46A2;
-    --ink: #000000;
-    --rust: #C1502E;
+    --deep-green: #031d00;
+    --black: #000000;
+    --sakura-pink: #ffd8fa;
+    --splatoon-pink: #FF46A2;
+    --splatoon-yellow: #FFF000;
+    --red: #d43e3e;
     --teal: #004268;
-    --gold: #000000;
     --line: rgba(241, 230, 204, 0.18);
   }
 
@@ -23,8 +22,8 @@
 
   body {
     margin: 0;
-    background: radial-gradient(circle at bottom, #001100 0%, var(--deep-water) 0%, var(--deep-water-2) 100%);
-    color: var(--parchment);
+    background: radial-gradient(circle at bottom, #001100 0%, var(--deep-green) 0%, var(--black) 100%);
+    color: var(--sakura-pink);
     font-family: 'Inter', sans-serif;
     min-height: 100vh;
     padding: 40px 20px 80px;
@@ -52,7 +51,7 @@
   }
 
   .subhead {
-    color: var(--parchment-2);
+    color: var(--splatoon-pink);
     font-size: 15px;
     max-width: 520px;
     margin: 0 auto;
@@ -64,13 +63,13 @@
     align-items: center;
     gap: 10px;
     margin: 36px 0;
-    color: var(--parchment-2);
+    color: var(--splatoon-pink);
     opacity: 0.6;
   }
   .voyage-line::before, .voyage-line::after {
     content: '';
     flex: 1;
-    border-top: 2px dotted var(--parchment-2);
+    border-top: 2px dotted var(--splatoon-pink);
   }
   .voyage-line span { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.15em; }
 
@@ -96,7 +95,7 @@
     width: 0; height: 0;
     border-left: 14px solid transparent;
     border-right: 14px solid transparent;
-    border-top: 22px solid #2b5228;
+    border-top: 22px solid #d43e3e;
     z-index: 5;
     filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4));
   }
@@ -106,8 +105,8 @@
     height: 100%;
     border-radius: 50%;
     position: relative;
-    border: 6px solid var(--gold);
-    box-shadow: 0 0 0 3px var(--deep-water-2), 0 20px 40px rgba(0,0,0,0.45);
+    border: 6px solid var(--black);
+    box-shadow: 0 0 0 3px var(--black), 0 20px 40px rgba(0,0,0,0.45);
     transition: transform 4.5s cubic-bezier(0.12, 0.72, 0.15, 1);
     overflow: hidden;
   }
@@ -131,8 +130,8 @@
     position: absolute;
     top: 50%; left: 50%;
     width: 46px; height: 46px;
-    background: var(--deep-water-2);
-    border: 4px solid var(--gold);
+    background: var(--black);
+    border: 4px solid var(--black);
     border-radius: 50%;
     transform: translate(-50%, -50%);
     z-index: 4;
@@ -144,9 +143,9 @@
   /* Result Box Styles */
   .result-box {
     margin-top: 10px;
-    background: var(--deep-water-2);
+    background: var(--black);
     border: 2px solid var(--teal);
-    color: var(--parchment);
+    color: var(--sakura-pink);
     padding: 16px 24px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 20px;
@@ -163,8 +162,8 @@
   }
 
   .result-box.highlight {
-    border-color: var(--rust);
-    color: var(--parchment-2);
+    border-color: var(--splatoon-yellow);
+    color: var(--splatoon-pink);
     transform: scale(1.05);
     box-shadow: 0 8px 30px rgba(193, 80, 46, 0.4);
   }
@@ -178,13 +177,13 @@
   }
 
   select {
-    background: var(--deep-water-2);
-    color: var(--parchment);
+    background: var(--black);
+    color: var(--sakura-pink);
   }
 
   .spin-btn {
-    background: var(--rust);
-    color: var(--parchment);
+    background: var(--teal);
+    color: var(--black);
     border: none;
     font-weight: 600;
     letter-spacing: 0.03em;
@@ -192,12 +191,12 @@
     padding: 12px 28px;
     transition: transform 0.15s ease, background 0.15s ease;
   }
-  .spin-btn:hover:not(:disabled) { transform: translateY(-1px); background: #A8452A; }
+  .spin-btn:hover:not(:disabled) { transform: translateY(-1px); background: #FFF000; }
   .spin-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
   .finish-btn {
-    background: var(--teal);
-    color: var(--deep-water-2);
+    background: var(--red);
+    color: var(--black);
     border: none;
     font-weight: 600;
     cursor: pointer;
@@ -210,7 +209,7 @@
   .status-msg {
     font-family: 'JetBrains Mono', monospace;
     font-size: 13px;
-    color: var(--parchment);
+    color: var(--sakura-pink);
     min-height: 18px;
     text-align: center;
   }
@@ -224,8 +223,8 @@
   }
 
   .panel {
-    background: var(--parchment);
-    color: var(--ink);
+    background: var(--sakura-pink);
+    color: var(--black);
     border-radius: 18px;
     padding: 22px 22px 8px;
     box-shadow: 0 14px 30px rgba(0,0,0,0.35);
@@ -274,8 +273,8 @@
 
   .island-pill {
     display: inline-block;
-    background: var(--deep-water);
-    color: var(--parchment);
+    background: var(--deep-green);
+    color: var(--sakura-pink);
     border-radius: 50px;
     padding: 7px 15px;
     font-family: 'JetBrains Mono', monospace;
@@ -293,13 +292,13 @@
     margin-top: 60px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
-    color: var(--parchment-2);
+    color: var(--splatoon-pink);
     opacity: 0.5;
   }
 
   #configWarning {
-    background: var(--rust);
-    color: var(--parchment);
+    background: var(--splatoon-yellow);
+    color: var(--sakura-pink);
     padding: 12px 18px;
     border-radius: 10px;
     font-family: 'JetBrains Mono', monospace;
@@ -339,7 +338,14 @@
     <div class="result-box" id="resultBox">Spin Me!!</div>
 
     <button class="spin-btn" id="spinBtn">Spin the Wheel</button>
+    <button class="finish-btn" id="resetBtn" style="background:#7a1f1f;color:var(--sakura-pink);">⚠ Reset All Progress</button>
     <div class="status-msg" id="statusMsg"></div>
+  </div>
+
+  <div class="voyage-line"><span>YOUR CREW MATE'S PICKS</span></div>
+  <div class="panel" style="max-width:600px;margin:0 auto;">
+    <h2>🎯 Free Starting Picks</h2>
+    <div id="interestPicksList"></div>
   </div>
 
   <div class="voyage-line"><span>SHIP'S LOG</span></div>
@@ -360,18 +366,22 @@
 
 <script>
 /* ===================== CONFIG ===================== */
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx6LMVOjW8obosE24WS5ecYDeo1LR-Uo3gKmPMcwMpEP6ScDW9wwrgIlT6zKj6rmqZtQw/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzFaHNP8C00PakKQHEjZdHZ8NVRx2gsCPc5sI_4_am07nG8teojzOKnVmXA7EUPb2cFhQ/exec";
 /* ==================================================== */
 
 const wheelDisc = document.getElementById('wheelDisc');
 const spinBtn = document.getElementById('spinBtn');
+const resetBtn = document.getElementById('resetBtn');
 const statusMsg = document.getElementById('statusMsg');
 const resultBox = document.getElementById('resultBox');
 const playerSelect = document.getElementById('playerSelect');
 const playersList = document.getElementById('playersList');
 const gamesList = document.getElementById('gamesList');
+const interestPicksList = document.getElementById('interestPicksList');
 
-const SEGMENT_COLORS = ['#3E8E7E', '#C1502E', '#C9A227', '#8C6E4B'];
+const STATUS_LABEL = { active: 'sailing', completed: '✅ beaten', released: '🏳️ released' };
+
+const SEGMENT_COLORS = ['#004268', '#FFF000'];
 let currentRotation = 0;
 let lastSegments = []; // names shown on the wheel at the moment of the last spin
 
@@ -384,14 +394,19 @@ async function fetchState() {
   return res.json();
 }
 
-async function postAction(action, player) {
+async function postAction(action, player, extra) {
   const res = await fetch(APPS_SCRIPT_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // avoids CORS preflight on Apps Script
-    body: JSON.stringify({ action, player })
+    body: JSON.stringify(Object.assign({ action, player }, extra || {}))
   });
   return res.json();
 }
+
+let lastState = null;
+playerSelect.addEventListener('change', () => {
+  if (lastState) { updateSpinAvailability(lastState.players); renderInterestPicks(lastState.players); }
+});
 
 function distinctAvailableGames(games) {
   return games; // already just an array of available game names
@@ -402,7 +417,7 @@ function renderWheel(names) {
   wheelDisc.querySelectorAll('.wheel-label').forEach(el => el.remove());
 
   if (names.length === 0) {
-    wheelDisc.style.background = 'var(--deep-water-2)';
+    wheelDisc.style.background = 'var(--black)';
     return;
   }
 
@@ -428,26 +443,64 @@ function renderWheel(names) {
 function renderPlayers(players) {
   playersList.innerHTML = '';
   players.forEach(p => {
-    const row = document.createElement('div');
-    row.className = 'card-row';
-    row.innerHTML = `
-      <div>
-        <div class="player-name">${p.name}</div>
-        ${p.currentGame ? `<div class="player-game">sailing to <strong>${p.currentGame}</strong></div>` : `<span class="idle-tag">idle at port</span>`}
-        <div class="player-game">🪙 ${p.coins} &nbsp; streak ${p.streak} (best ${p.longestStreak}) &nbsp; 🔁${p.rerolls}</div>
+    const wrap = document.createElement('div');
+    wrap.className = 'card-row';
+    wrap.style.flexDirection = 'column';
+    wrap.style.alignItems = 'stretch';
+
+    const invItems = p.inventory.map(item => `
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; font-size:13px;">
+        <span>${item.game} <span class="player-game">(${STATUS_LABEL[item.status] || item.status})</span></span>
+        ${item.status === 'active' ? `<button class="finish-btn" data-player="${p.name}" data-game="${item.game}">Mark Finished</button>` : ''}
       </div>
-      ${p.currentGame ? `<button class="finish-btn" data-player="${p.name}">Mark Finished</button>` : ''}
+    `).join('') || `<span class="idle-tag">no games yet</span>`;
+
+    wrap.innerHTML = `
+      <div class="player-name">${p.name} &nbsp; <span class="player-game">${p.inventoryCount}/${p.inventoryFull ? 10 : 10} in the hold${p.inventoryFull ? ' — FULL' : ''}</span></div>
+      <div class="player-game">🪙 ${p.coins} &nbsp; streak ${p.streak} (best ${p.longestStreak}) &nbsp; 🔁${p.rerolls} &nbsp; free picks left: ${p.freeClaimsRemaining}</div>
+      <div style="margin-top:6px;">${invItems}</div>
     `;
-    playersList.appendChild(row);
+    playersList.appendChild(wrap);
   });
   playersList.querySelectorAll('.finish-btn').forEach(btn => {
-    btn.addEventListener('click', () => handleComplete(btn.dataset.player));
+    btn.addEventListener('click', () => handleComplete(btn.dataset.player, btn.dataset.game));
   });
 
   // Keep the player select in sync
   const prevSelection = playerSelect.value;
   playerSelect.innerHTML = players.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
   if (players.some(p => p.name === prevSelection)) playerSelect.value = prevSelection;
+
+  updateSpinAvailability(players);
+  renderInterestPicks(players);
+}
+
+function updateSpinAvailability(players) {
+  const selected = players.find(p => p.name === playerSelect.value);
+  spinBtn.disabled = !!(selected && selected.inventoryFull);
+}
+
+function renderInterestPicks(players) {
+  const selected = players.find(p => p.name === playerSelect.value);
+  interestPicksList.innerHTML = '';
+  if (!selected) return;
+
+  if (selected.freeClaimsRemaining <= 0) {
+    interestPicksList.innerHTML = `<span class="idle-tag">no free picks left</span>`;
+    return;
+  }
+  if (selected.interestPicksAvailable.length === 0) {
+    interestPicksList.innerHTML = `<span class="idle-tag">nothing on your interest list is available right now</span>`;
+    return;
+  }
+
+  selected.interestPicksAvailable.forEach(game => {
+    const row = document.createElement('div');
+    row.className = 'card-row';
+    row.innerHTML = `<span>${game}</span><button class="finish-btn" data-game="${game}">Claim (free)</button>`;
+    row.querySelector('button').addEventListener('click', () => handleClaimInterest(selected.name, game));
+    interestPicksList.appendChild(row);
+  });
 }
 
 function renderGames(games) {
@@ -463,6 +516,7 @@ function renderGames(games) {
 async function refresh() {
   const state = await fetchState();
   if (state.error) { statusMsg.textContent = state.error; return; }
+  lastState = state;
   renderPlayers(state.players);
   renderGames(state.games);
   renderWheel(distinctAvailableGames(state.games));
@@ -506,8 +560,9 @@ async function handleSpin() {
     resultBox.textContent = result.winner;
     resultBox.classList.add('highlight');
     
-    statusMsg.textContent = `${player} is now playing ${result.winner}!`;
-    renderPlayers(result.players);
+    statusMsg.textContent = `${player} added ${result.winner} to their hold!`;
+    lastState = result;
+    renderPlayers(result.players); // also re-applies correct spin-button state via updateSpinAvailability
     renderGames(result.games);
     // Re-render the wheel to reflect the post-spin pool, but don't reset rotation
     lastSegments = distinctAvailableGames(result.games);
@@ -517,20 +572,47 @@ async function handleSpin() {
       return `${color} ${i * segAngleNew}deg ${(i + 1) * segAngleNew}deg`;
     }).join(', ');
     if (lastSegments.length) wheelDisc.style.background = `conic-gradient(${stops})`;
-    spinBtn.disabled = false;
   }, spinDurationMs);
 }
 
-async function handleComplete(player) {
-  statusMsg.textContent = `Logging ${player}'s crossing as complete...`;
-  const result = await postAction('complete', player);
+async function handleComplete(player, game) {
+  statusMsg.textContent = `Logging ${player}'s crossing of ${game} as complete...`;
+  const result = await postAction('complete', player, { game });
   if (result.error) { statusMsg.textContent = result.error; return; }
-  statusMsg.textContent = `${player} reached the island. Well sailed!`;
+  statusMsg.textContent = `${player} beat ${game}. Well sailed!`;
+  lastState = result;
   renderPlayers(result.players);
   renderGames(result.games);
 }
 
+async function handleClaimInterest(player, game) {
+  statusMsg.textContent = `Claiming ${game} for ${player}...`;
+  const result = await postAction('claimInterest', player, { game });
+  if (result.error) { statusMsg.textContent = result.error; return; }
+  statusMsg.textContent = `${player} added ${game} to their hold — free pick used.`;
+  lastState = result;
+  renderPlayers(result.players);
+  renderGames(result.games);
+  renderWheel(distinctAvailableGames(result.games));
+}
+
+async function handleReset() {
+  const confirmed = confirm('This wipes ALL progress — completions, dates, coins spent, streaks, and every inventory. This cannot be undone. Continue?');
+  if (!confirmed) return;
+  statusMsg.textContent = 'Resetting everything...';
+  const result = await postAction('reset', null);
+  if (result.error) { statusMsg.textContent = result.error; return; }
+  statusMsg.textContent = 'Fresh voyage — everything reset.';
+  resultBox.textContent = 'Spin Me!!';
+  resultBox.classList.remove('highlight');
+  lastState = result;
+  renderPlayers(result.players);
+  renderGames(result.games);
+  renderWheel(distinctAvailableGames(result.games));
+}
+
 spinBtn.addEventListener('click', handleSpin);
+resetBtn.addEventListener('click', handleReset);
 refresh();
 setInterval(refresh, 15000); // light polling so everyone's screen stays roughly in sync
 </script>
