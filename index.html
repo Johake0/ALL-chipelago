@@ -348,6 +348,31 @@
     <div id="interestPicksList"></div>
   </div>
 
+  <div class="voyage-line"><span>TROPHY CASE &amp; TRADING POST</span></div>
+  <div class="panels-stack">
+    <div class="panel">
+      <h2>🏆 Trophy Case</h2>
+      <div id="trophyCaseList"></div>
+    </div>
+    <div class="panel">
+      <h2>🔄 Trade</h2>
+      <label style="font-size:12px;">Your game to offer</label>
+      <select id="tradeMyGameSelect" style="width:100%;margin-bottom:8px;"></select>
+      <label style="font-size:12px;">Trade with</label>
+      <select id="tradePartnerSelect" style="width:100%;margin-bottom:8px;"></select>
+      <label style="font-size:12px;">Their game you want</label>
+      <select id="tradeTheirGameSelect" style="width:100%;margin-bottom:8px;"></select>
+      <button class="finish-btn" id="tradeBtn" style="width:100%;">Execute Trade</button>
+
+      <h2 style="margin-top:20px;">⚔️ Force</h2>
+      <label style="font-size:12px;">Game from your hold</label>
+      <select id="forceGameSelect" style="width:100%;margin-bottom:8px;"></select>
+      <label style="font-size:12px;">Force onto</label>
+      <select id="forceTargetSelect" style="width:100%;margin-bottom:8px;"></select>
+      <button class="finish-btn" id="forceBtn" style="width:100%;background:#8a4b1f;">Force It (coin cost not yet wired up)</button>
+    </div>
+  </div>
+
   <div class="voyage-line"><span>SHIP'S LOG</span></div>
 
   <div class="panels-stack">
@@ -366,7 +391,7 @@
 
 <script>
 /* ===================== CONFIG ===================== */
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzFaHNP8C00PakKQHEjZdHZ8NVRx2gsCPc5sI_4_am07nG8teojzOKnVmXA7EUPb2cFhQ/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzpxfFSbuv26cEnkMgTnj3wT5oDhvu036fjYmkE0FGrFp6UYmqKLgiz7-0J5_HRXOOQ/exec";
 /* ==================================================== */
 
 const wheelDisc = document.getElementById('wheelDisc');
@@ -378,7 +403,16 @@ const playerSelect = document.getElementById('playerSelect');
 const playersList = document.getElementById('playersList');
 const gamesList = document.getElementById('gamesList');
 const interestPicksList = document.getElementById('interestPicksList');
+const trophyCaseList = document.getElementById('trophyCaseList');
+const tradePartnerSelect = document.getElementById('tradePartnerSelect');
+const tradeMyGameSelect = document.getElementById('tradeMyGameSelect');
+const tradeTheirGameSelect = document.getElementById('tradeTheirGameSelect');
+const tradeBtn = document.getElementById('tradeBtn');
+const forceTargetSelect = document.getElementById('forceTargetSelect');
+const forceGameSelect = document.getElementById('forceGameSelect');
+const forceBtn = document.getElementById('forceBtn');
 
+const INVENTORY_SIZE = 10;
 const STATUS_LABEL = { active: 'sailing', completed: '✅ beaten', released: '🏳️ released' };
 
 const SEGMENT_COLORS = ['#004268', '#FFF000'];
@@ -405,7 +439,15 @@ async function postAction(action, player, extra) {
 
 let lastState = null;
 playerSelect.addEventListener('change', () => {
-  if (lastState) { updateSpinAvailability(lastState.players); renderInterestPicks(lastState.players); }
+  if (lastState) {
+    updateSpinAvailability(lastState.players);
+    renderInterestPicks(lastState.players);
+    renderTrophyCase(lastState.players);
+    renderTradeAndForce(lastState.players);
+  }
+});
+tradePartnerSelect.addEventListener('change', () => {
+  if (lastState) renderTradeAndForce(lastState.players);
 });
 
 function distinctAvailableGames(games) {
@@ -450,15 +492,23 @@ function renderPlayers(players) {
 
     const invItems = p.inventory.map(item => `
       <div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; font-size:13px;">
-        <span>${item.game} <span class="player-game">(${STATUS_LABEL[item.status] || item.status})</span></span>
-        ${item.status === 'active' ? `<button class="finish-btn" data-player="${p.name}" data-game="${item.game}">Mark Finished</button>` : ''}
+        <span>${item.game}</span>
+        <button class="finish-btn" data-player="${p.name}" data-game="${item.game}">Mark Finished</button>
       </div>
     `).join('') || `<span class="idle-tag">no games yet</span>`;
 
+    const forceItem = p.forceSlot
+      ? `<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; font-size:13px;">
+           <span>⚔️ ${p.forceSlot.game}</span>
+           <button class="finish-btn" data-player="${p.name}" data-game="${p.forceSlot.game}">Mark Finished</button>
+         </div>`
+      : `<span class="idle-tag">force slot empty</span>`;
+
     wrap.innerHTML = `
-      <div class="player-name">${p.name} &nbsp; <span class="player-game">${p.inventoryCount}/${p.inventoryFull ? 10 : 10} in the hold${p.inventoryFull ? ' — FULL' : ''}</span></div>
+      <div class="player-name">${p.name} &nbsp; <span class="player-game">${p.inventoryCount}/${INVENTORY_SIZE} in the hold${p.inventoryFull ? ' — FULL' : ''} &nbsp;|&nbsp; force slot ${p.forceSlot ? '1' : '0'}/1</span></div>
       <div class="player-game">🪙 ${p.coins} &nbsp; streak ${p.streak} (best ${p.longestStreak}) &nbsp; 🔁${p.rerolls} &nbsp; free picks left: ${p.freeClaimsRemaining}</div>
       <div style="margin-top:6px;">${invItems}</div>
+      <div style="margin-top:6px; border-top:1px dashed rgba(31,42,46,0.18); padding-top:6px;">${forceItem}</div>
     `;
     playersList.appendChild(wrap);
   });
@@ -473,6 +523,8 @@ function renderPlayers(players) {
 
   updateSpinAvailability(players);
   renderInterestPicks(players);
+  renderTrophyCase(players);
+  renderTradeAndForce(players);
 }
 
 function updateSpinAvailability(players) {
@@ -501,6 +553,45 @@ function renderInterestPicks(players) {
     row.querySelector('button').addEventListener('click', () => handleClaimInterest(selected.name, game));
     interestPicksList.appendChild(row);
   });
+}
+
+function renderTrophyCase(players) {
+  trophyCaseList.innerHTML = '';
+  const selected = players.find(p => p.name === playerSelect.value);
+  if (!selected) return;
+  if (selected.completedGames.length === 0) {
+    trophyCaseList.innerHTML = `<span class="idle-tag">nothing finished yet</span>`;
+    return;
+  }
+  selected.completedGames.forEach(g => {
+    const row = document.createElement('div');
+    row.className = 'card-row';
+    row.innerHTML = `<span>${g.status === 'released' ? '🏳️' : '🏆'} ${g.game}</span><span class="player-game">🪙 ${g.coinValue}</span>`;
+    trophyCaseList.appendChild(row);
+  });
+}
+
+function renderTradeAndForce(players) {
+  const me = playerSelect.value;
+  const mine = players.find(p => p.name === me);
+  const others = players.filter(p => p.name !== me);
+
+  // Trade panel
+  const previousPartner = tradePartnerSelect.value;
+
+  tradePartnerSelect.innerHTML =
+      others.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
+  if (others.some(p => p.name === previousPartner)) {
+      tradePartnerSelect.value = previousPartner;
+  }
+  const partner =
+      players.find(p => p.name === tradePartnerSelect.value) || others[0];
+  tradeMyGameSelect.innerHTML = (mine ? mine.inventory : []).map(i => `<option value="${i.game}">${i.game}</option>`).join('') || '<option disabled>nothing to offer</option>';
+  tradeTheirGameSelect.innerHTML = (partner ? partner.inventory : []).map(i => `<option value="${i.game}">${i.game}</option>`).join('') || '<option disabled>nothing to trade for</option>';
+
+  // Force panel
+  forceTargetSelect.innerHTML = others.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
+  forceGameSelect.innerHTML = (mine ? mine.inventory : []).map(i => `<option value="${i.game}">${i.game}</option>`).join('') || '<option disabled>nothing in your hold</option>';
 }
 
 function renderGames(games) {
@@ -611,8 +702,39 @@ async function handleReset() {
   renderWheel(distinctAvailableGames(result.games));
 }
 
+async function handleTrade() {
+  const player = playerSelect.value;
+  const game = tradeMyGameSelect.value;
+  const targetPlayer = tradePartnerSelect.value;
+  const targetGame = tradeTheirGameSelect.value;
+  if (!game || !targetGame) { statusMsg.textContent = 'Both players need a game selected to trade.'; return; }
+  statusMsg.textContent = `Trading ${game} for ${targetGame}...`;
+  const result = await postAction('trade', player, { game, targetPlayer, targetGame });
+  if (result.error) { statusMsg.textContent = result.error; return; }
+  statusMsg.textContent = `Trade done: ${player} \u2194 ${targetPlayer}.`;
+  lastState = result;
+  renderPlayers(result.players);
+  renderGames(result.games);
+}
+
+async function handleForce() {
+  const player = playerSelect.value;
+  const game = forceGameSelect.value;
+  const targetPlayer = forceTargetSelect.value;
+  if (!game) { statusMsg.textContent = 'Pick a game from your hold to force.'; return; }
+  statusMsg.textContent = `Forcing ${targetPlayer} onto ${game}...`;
+  const result = await postAction('force', player, { game, targetPlayer });
+  if (result.error) { statusMsg.textContent = result.error; return; }
+  statusMsg.textContent = `${targetPlayer} has been forced onto ${game}.`;
+  lastState = result;
+  renderPlayers(result.players);
+  renderGames(result.games);
+}
+
 spinBtn.addEventListener('click', handleSpin);
 resetBtn.addEventListener('click', handleReset);
+tradeBtn.addEventListener('click', handleTrade);
+forceBtn.addEventListener('click', handleForce);
 refresh();
 setInterval(refresh, 15000); // light polling so everyone's screen stays roughly in sync
 </script>
