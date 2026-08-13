@@ -36,6 +36,17 @@ router.patch('/users/:id', requireAdmin, async (req, res, next) => {
   }
 });
 
+// GET /users — full list, for populating owner/forcedBy/interestFor pickers
+// in the admin tool and for the Users tab itself.
+router.get('/users', requireAdmin, async (req, res, next) => {
+  try {
+    const users = await User.find().lean();
+    res.json(users);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.delete('/users/:id', requireAdmin, async (req, res, next) => {
   try {
     const user = await User.findByIdAndDelete(req.params.id);
@@ -51,6 +62,23 @@ router.delete('/users/:id', requireAdmin, async (req, res, next) => {
 });
 
 // ----- Games: add / edit / remove from the list -----
+
+// GET /games — full unfiltered dump of every game (unlike the public
+// /api/state, this includes removed/forced/finished games too), with
+// owner/forcedBy/interestFor populated to usernames. This is the audit/
+// override view: the data the manual-correction tool is built on.
+router.get('/games', requireAdmin, async (req, res, next) => {
+  try {
+    const games = await Game.find()
+      .populate('ownerId', 'username')
+      .populate('forcedByUserId', 'username')
+      .populate('interestFor', 'username')
+      .lean();
+    res.json(games);
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.post('/games', requireAdmin, async (req, res, next) => {
   try {
@@ -69,17 +97,29 @@ router.post('/games', requireAdmin, async (req, res, next) => {
   }
 });
 
+// Full override surface — this is what the manual-correction tool needs to
+// fix records that didn't transfer correctly from the Sheet: not just the
+// static fields (name/coinValue/etc.) but who owns a copy and what state
+// it's in.
+const OVERRIDABLE_FIELDS = [
+  'name', 'coinValue', 'forceReleaseCost', 'scalingTags', 'removed',
+  'status', 'ownerId', 'forcedByUserId', 'interestFor', 'claimMethod',
+  'released', 'dateAssigned', 'dateCompleted'
+];
+
 router.patch('/games/:id', requireAdmin, async (req, res, next) => {
   try {
-    const allowedFields = ['name', 'coinValue', 'forceReleaseCost', 'scalingTags', 'removed'];
     const updates = {};
-    for (const field of allowedFields) {
+    for (const field of OVERRIDABLE_FIELDS) {
       if (field in req.body) updates[field] = req.body[field];
     }
     const game = await Game.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
     if (!game) return res.status(404).json({ error: 'Game not found.' });
     res.json(game);
   } catch (err) {
+    if (err.name === 'CastError' || err.name === 'ValidationError') {
+      return res.status(400).json({ error: err.message });
+    }
     next(err);
   }
 });

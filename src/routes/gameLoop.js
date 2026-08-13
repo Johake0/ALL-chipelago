@@ -7,11 +7,26 @@ import { computeUserStats, inventoryCountForUser, freeClaimsUsedForUser, LIMITS 
 
 const router = express.Router();
 
+// Gates state/spin/complete/claim-interest/trade/force behind a shared
+// player passphrase — same speed-bump philosophy as ADMIN_SECRET, just for
+// "which friends can touch the game state at all" rather than "who can
+// override records." /reset has its own separate admin check instead.
+// Applied per-route (not via router.use()) because gameLoop.js and admin.js
+// are both mounted at '/api' in server.js — a blanket router-level
+// middleware here would intercept admin.js's requests too before they ever
+// got a chance to match there.
+function requirePlayerSecret(req, res, next) {
+  if (!process.env.PLAYER_SECRET || req.headers['x-player-secret'] !== process.env.PLAYER_SECRET) {
+    return res.status(403).json({ error: 'Not authorized.' });
+  }
+  next();
+}
+
 // ---------------------------------------------------------------------
 // GET /api/state — everything the frontend needs in one call, same shape
 // as the old Apps Script getState() response.
 // ---------------------------------------------------------------------
-router.get('/state', async (req, res, next) => {
+router.get('/state', requirePlayerSecret, async (req, res, next) => {
   try {
     const [users, availableGames] = await Promise.all([
       User.find().lean(),
@@ -32,7 +47,7 @@ router.get('/state', async (req, res, next) => {
         return {
           id: user._id,
           name: user.username,
-          inventory: inventory.map((g) => ({ id: g._id, game: g.name })),
+          inventory: inventory.map((g) => ({ id: g._id, game: g.name, forceReleaseCost: g.forceReleaseCost })),
           inventoryCount,
           inventoryFull: inventoryCount >= LIMITS.INVENTORY_SIZE,
           forceSlot: forceSlotDoc ? { id: forceSlotDoc._id, game: forceSlotDoc.name } : null,
@@ -76,7 +91,7 @@ router.get('/state', async (req, res, next) => {
 // ---------------------------------------------------------------------
 // POST /api/spin  { userId }
 // ---------------------------------------------------------------------
-router.post('/spin', async (req, res, next) => {
+router.post('/spin', requirePlayerSecret, async (req, res, next) => {
   try {
     const { userId } = req.body;
     const user = await User.findById(userId);
@@ -108,7 +123,7 @@ router.post('/spin', async (req, res, next) => {
 // ---------------------------------------------------------------------
 // POST /api/claim-interest  { userId, gameId }
 // ---------------------------------------------------------------------
-router.post('/claim-interest', async (req, res, next) => {
+router.post('/claim-interest', requirePlayerSecret, async (req, res, next) => {
   try {
     const { userId, gameId } = req.body;
     const user = await User.findById(userId);
@@ -144,7 +159,7 @@ router.post('/claim-interest', async (req, res, next) => {
 // Looks at a normal hold item OR a forced item — same "either state" logic
 // as the old completeForPlayer(), just expressed as one status check.
 // ---------------------------------------------------------------------
-router.post('/complete', async (req, res, next) => {
+router.post('/complete', requirePlayerSecret, async (req, res, next) => {
   try {
     const { userId, gameId } = req.body;
     const game = await Game.findOne({
@@ -168,7 +183,7 @@ router.post('/complete', async (req, res, next) => {
 // POST /api/trade  { userId, gameId, targetUserId, targetGameId }
 // Straight 1-for-1 ownership swap between two currently-in-hold games.
 // ---------------------------------------------------------------------
-router.post('/trade', async (req, res, next) => {
+router.post('/trade', requirePlayerSecret, async (req, res, next) => {
   const session = await mongoose.startSession();
   try {
     const { userId, gameId, targetUserId, targetGameId } = req.body;
@@ -200,9 +215,10 @@ router.post('/trade', async (req, res, next) => {
 
 // ---------------------------------------------------------------------
 // POST /api/force  { userId, gameId, targetUserId }
-// Coin cost intentionally NOT enforced yet — same as the Apps Script version.
+// Forcing costs the forcer game.forceReleaseCost coins, deducted via a
+// Trade log entry (see computeUserStats) rather than a stored balance.
 // ---------------------------------------------------------------------
-router.post('/force', async (req, res, next) => {
+router.post('/force', requirePlayerSecret, async (req, res, next) => {
   try {
     const { userId, gameId, targetUserId } = req.body;
     if (userId === targetUserId) return res.status(400).json({ error: "Can't force yourself." });
@@ -218,12 +234,17 @@ router.post('/force', async (req, res, next) => {
     const game = await Game.findOne({ _id: gameId, ownerId: userId, status: 'in_inventory' });
     if (!game) return res.status(404).json({ error: 'That game is not in your hold.' });
 
+    const { coins } = await computeUserStats(userId);
+    if (coins < game.forceReleaseCost) {
+      return res.status(400).json({ error: `Forcing "${game.name}" costs ${game.forceReleaseCost} coins — you only have ${coins}.` });
+    }
+
     game.status = 'forced';
     game.ownerId = targetUserId;
     game.forcedByUserId = userId;
     await game.save();
 
-    await Trade.create({ type: 'force', fromUserId: userId, toUserId: targetUserId, gameIdFrom: game._id });
+    await Trade.create({ type: 'force', fromUserId: userId, toUserId: targetUserId, gameIdFrom: game._id, coinCost: game.forceReleaseCost });
 
     res.json({ ok: true, game: game.name });
   } catch (err) {

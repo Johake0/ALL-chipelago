@@ -1,4 +1,5 @@
 import Game from '../models/Game.js';
+import Trade from '../models/Trade.js';
 
 const INVENTORY_SIZE = 10;
 const FREE_INTEREST_PICKS = 3;
@@ -12,12 +13,10 @@ const FREE_INTEREST_PICKS = 3;
  * released game resets it to 0. Longest streak is the max seen along the way.
  */
 export async function computeUserStats(userId) {
-  const history = await Game.find({
-    ownerId: userId,
-    status: 'finished'
-  })
-    .sort({ dateCompleted: 1 })
-    .lean();
+  const [history, forcesPaid] = await Promise.all([
+    Game.find({ ownerId: userId, status: 'finished' }).sort({ dateCompleted: 1 }).lean(),
+    Trade.find({ type: 'force', fromUserId: userId }).lean()
+  ]);
 
   let coins = 0;
   let streak = 0;
@@ -32,6 +31,8 @@ export async function computeUserStats(userId) {
       if (streak > longestStreak) longestStreak = streak;
     }
   }
+
+  coins -= forcesPaid.reduce((sum, t) => sum + (t.coinCost || 0), 0);
 
   return { coins, streak, longestStreak };
 }
