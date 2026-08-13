@@ -15,10 +15,17 @@ export default function PassGate({ children }) {
       await publicFetch('/api/state')
       setStatus('ok')
       setError('')
-    } catch {
+    } catch (err) {
       clearPlayerSecret()
       setStatus('needed')
-      setError('Wrong passphrase.')
+      // A blocked CORS response makes fetch() itself throw a TypeError
+      // before any status code is readable — that's not a wrong password,
+      // it's the server not recognizing this origin (check ALLOWED_ORIGINS).
+      setError(
+        err instanceof TypeError
+          ? "Couldn't reach the server (not a passphrase problem — likely a CORS/network issue on the backend)."
+          : 'Wrong passphrase.'
+      )
     }
   }
 

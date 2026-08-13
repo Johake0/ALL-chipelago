@@ -14,10 +14,17 @@ export default function SecretGate({ children }) {
       await adminFetch('/api/users')
       setStatus('ok')
       setError('')
-    } catch {
+    } catch (err) {
       clearAdminSecret()
       setStatus('needed')
-      setError('That secret was rejected — check ADMIN_SECRET on the backend.')
+      // A blocked CORS response makes fetch() itself throw a TypeError
+      // before any status code is readable — that's not a wrong secret,
+      // it's the server not recognizing this origin (check ALLOWED_ORIGINS).
+      setError(
+        err instanceof TypeError
+          ? "Couldn't reach the server (not a secret problem — likely a CORS/network issue on the backend)."
+          : 'That secret was rejected — check ADMIN_SECRET on the backend.'
+      )
     }
   }
 
