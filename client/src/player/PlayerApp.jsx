@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useGameState } from './useGameState.js'
-import { spin, completeGame, claimInterest, trade, force } from './playerApi.js'
+import { spin, completeGame, claimInterest, trade, force, release, reroll } from './playerApi.js'
 import Wheel from './Wheel.jsx'
 import StatsBar from './StatsBar.jsx'
 import InventoryList from './InventoryList.jsx'
 import InterestPicks from './InterestPicks.jsx'
 import TrophyCase from './TrophyCase.jsx'
-import TradePanel from './TradePanel.jsx'
-import ForcePanel from './ForcePanel.jsx'
+import Bazaar from './Bazaar.jsx'
 import GamesPool from './GamesPool.jsx'
 import PassGate from './PassGate.jsx'
+import ProfileSelect from './ProfileSelect.jsx'
+import Avatar from './Avatar.jsx'
 import './player.css'
 
 const PLAYER_KEY = 'archipelago_player_id'
@@ -49,15 +50,14 @@ function PlayerHome() {
     return capped
   }, [state, winner])
 
-  useEffect(() => {
-    if (state && !me && state.players.length > 0) {
-      setPlayerId(state.players[0].id)
-    }
-  }, [state, me])
-
   function selectPlayer(id) {
     setPlayerId(id)
     localStorage.setItem(PLAYER_KEY, id)
+  }
+
+  function switchProfile() {
+    setPlayerId('')
+    localStorage.removeItem(PLAYER_KEY)
   }
 
   async function runAction(fn, successMsg) {
@@ -100,45 +100,70 @@ function PlayerHome() {
     runAction(() => trade(me.id, gameId, targetUserId, targetGameId), 'Trade complete!')
   const handleForce = ({ gameId, targetUserId }) =>
     runAction(() => force(me.id, gameId, targetUserId), 'Game forced!')
+  const handleRelease = (gameId) => runAction(() => release(me.id, gameId), 'Game released.')
+  const handleReroll = (gameId) => runAction(() => reroll(me.id, gameId), 'Game rerolled back into the pool!')
 
   if (error) return <p className="load-error">Couldn't reach the server: {error}</p>
   if (!state) return <p className="loading">Loading…</p>
-  if (!me) return <p className="loading">No players yet — add some in the admin tool.</p>
+  if (state.players.length === 0) return <p className="loading">No players yet — add some in the admin tool.</p>
 
   return (
     <div className="player-app">
       <header className="hero">
         <p className="eyebrow">Archipelago Randomizer</p>
         <h1>The Wheel</h1>
-        <select className="player-picker" value={playerId} onChange={(e) => selectPlayer(e.target.value)}>
-          {state.players.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+        {me && (
+          <div className="current-player">
+            <Avatar player={me} size={40} />
+            <span className="current-player-name">{me.name}</span>
+            <button type="button" className="switch-profile-btn" onClick={switchProfile}>Switch Profile</button>
+          </div>
+        )}
       </header>
 
-      <Wheel
-        segments={wheelSegments}
-        spinToken={spinToken}
-        winner={winner}
-        spinning={spinLocked}
-        disabled={me.inventoryFull || state.games.length === 0}
-        disabledReason={me.inventoryFull ? 'Your hold is full.' : state.games.length === 0 ? 'No games left in the pool.' : ''}
-        onSpin={handleSpin}
-        onLanded={handleWheelLanded}
-      />
+      {!me ? (
+        <ProfileSelect players={state.players} onSelect={selectPlayer} />
+      ) : (
+        <>
+          <Wheel
+            segments={wheelSegments}
+            spinToken={spinToken}
+            winner={winner}
+            spinning={spinLocked}
+            disabled={me.inventoryFull || state.games.length === 0}
+            disabledReason={me.inventoryFull ? 'Your hold is full.' : state.games.length === 0 ? 'No games left in the pool.' : ''}
+            onSpin={handleSpin}
+            onLanded={handleWheelLanded}
+          />
 
-      {status && <p className="status-msg">{status}</p>}
+          {status && <p className="status-msg">{status}</p>}
 
-      <StatsBar player={me} inventorySize={state.inventorySize} />
+          <StatsBar player={me} inventorySize={state.inventorySize} />
 
-      <div className="panel-grid">
-        <InventoryList player={me} onComplete={handleComplete} busy={busy} />
-        <InterestPicks player={me} onClaim={handleClaimInterest} busy={busy} />
-        <TrophyCase player={me} />
-        <TradePanel me={me} players={state.players} onTrade={handleTrade} busy={busy} />
-        <ForcePanel me={me} players={state.players} onForce={handleForce} busy={busy} />
-      </div>
+          <div className="panel-grid">
+            <InventoryList player={me} onComplete={handleComplete} busy={busy} />
+            <TrophyCase player={me} />
+            <Bazaar
+              me={me}
+              players={state.players}
+              onTrade={handleTrade}
+              onForce={handleForce}
+              onRelease={handleRelease}
+              onReroll={handleReroll}
+              freeRerolls={state.freeRerolls}
+              busy={busy}
+            />
+          </div>
 
-      <GamesPool games={state.games} />
+          {me.freeClaimsRemaining > 0 && (
+            <div className="interest-section">
+              <InterestPicks player={me} onClaim={handleClaimInterest} busy={busy} />
+            </div>
+          )}
+
+          <GamesPool games={state.games} />
+        </>
+      )}
     </div>
   )
 }

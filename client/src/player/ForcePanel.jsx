@@ -20,8 +20,8 @@ export default function ForcePanel({ me, players, onForce, busy }) {
   }
 
   return (
-    <section className="panel">
-      <h2>Force</h2>
+    <div className="bazaar-card">
+      <h3>Force</h3>
       <form onSubmit={submit}>
         <label>Game from your hold
           <select value={gameId} onChange={(e) => setGameId(e.target.value)}>
@@ -38,11 +38,11 @@ export default function ForcePanel({ me, players, onForce, busy }) {
         </label>
         {selectedGame && (
           <p className={canAfford ? 'cost-ok' : 'cost-bad'}>
-            Costs {cost} coins — you have {me.coins}{!canAfford ? ' (not enough)' : ''}.
+            Costs {cost} coins — you have {me.coins} coins.{!canAfford ? ' (You do not have enough coins)' : ''}.
           </p>
         )}
         <button type="submit" disabled={busy || !gameId || !canAfford} className="danger-btn">Force It</button>
       </form>
-    </section>
+    </div>
   )
 }

@@ -19,8 +19,8 @@ export default function TradePanel({ me, players, onTrade, busy }) {
   }
 
   return (
-    <section className="panel">
-      <h2>Trade</h2>
+    <div className="bazaar-card">
+      <h3>Trade</h3>
       <form onSubmit={submit}>
         <label>Your game to offer
           <select value={myGameId} onChange={(e) => setMyGameId(e.target.value)}>
@@ -41,6 +41,6 @@ export default function TradePanel({ me, players, onTrade, busy }) {
         </label>
         <button type="submit" disabled={busy || !myGameId || !theirGameId}>Execute Trade</button>
       </form>
-    </section>
+    </div>
   )
 }

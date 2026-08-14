@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import Game from '../models/Game.js';
 import User from '../models/User.js';
 import Trade from '../models/Trade.js';
-import { computeUserStats, inventoryCountForUser, freeClaimsUsedForUser, LIMITS } from '../lib/stats.js';
+import { computeUserStats, inventoryCountForUser, freeClaimsUsedForUser, rerollsUsedForUser, rerollCost, LIMITS } from '../lib/stats.js';
 
 const router = express.Router();
 
@@ -23,6 +23,23 @@ function requirePlayerSecret(req, res, next) {
 }
 
 // ---------------------------------------------------------------------
+// GET /api/users/:id/avatar — deliberately public, no secret check.
+// <img> tags can't attach custom headers, and these are just friend-group
+// profile photos, not sensitive game state.
+// ---------------------------------------------------------------------
+router.get('/users/:id/avatar', async (req, res, next) => {
+  try {
+    const user = await User.findById(req.params.id).select('+avatar.data');
+    if (!user?.avatar?.data) return res.status(404).end();
+    res.set('Content-Type', user.avatar.contentType);
+    res.set('Cache-Control', 'public, max-age=300');
+    res.send(user.avatar.data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------
 // GET /api/state — everything the frontend needs in one call, same shape
 // as the old Apps Script getState() response.
 // ---------------------------------------------------------------------
@@ -35,22 +52,24 @@ router.get('/state', requirePlayerSecret, async (req, res, next) => {
 
     const players = await Promise.all(
       users.map(async (user) => {
-        const [inventory, forceSlotDoc, completedGames, stats, inventoryCount, freeClaimsUsed] = await Promise.all([
+        const [inventory, forceSlotDoc, completedGames, stats, inventoryCount, freeClaimsUsed, rerollsUsed] = await Promise.all([
           Game.find({ ownerId: user._id, status: 'in_inventory' }).lean(),
           Game.findOne({ ownerId: user._id, status: 'forced' }).lean(),
           Game.find({ ownerId: user._id, status: 'finished' }).lean(),
           computeUserStats(user._id),
           inventoryCountForUser(user._id),
-          freeClaimsUsedForUser(user._id)
+          freeClaimsUsedForUser(user._id),
+          rerollsUsedForUser(user._id)
         ]);
 
         return {
           id: user._id,
           name: user.username,
+          hasAvatar: !!user.avatar?.contentType,
           inventory: inventory.map((g) => ({ id: g._id, game: g.name, forceReleaseCost: g.forceReleaseCost })),
           inventoryCount,
           inventoryFull: inventoryCount >= LIMITS.INVENTORY_SIZE,
-          forceSlot: forceSlotDoc ? { id: forceSlotDoc._id, game: forceSlotDoc.name } : null,
+          forceSlot: forceSlotDoc ? { id: forceSlotDoc._id, game: forceSlotDoc.name, forceReleaseCost: forceSlotDoc.forceReleaseCost } : null,
           completedGames: completedGames.map((g) => ({
             id: g._id,
             game: g.name,
@@ -59,6 +78,8 @@ router.get('/state', requirePlayerSecret, async (req, res, next) => {
           })),
           interestPicksAvailable: [], // filled in below, per-user
           freeClaimsRemaining: Math.max(0, LIMITS.FREE_INTEREST_PICKS - freeClaimsUsed),
+          rerollsUsed,
+          nextRerollCost: rerollCost(rerollsUsed + 1),
           ...stats // coins, streak, longestStreak
         };
       })
@@ -81,6 +102,7 @@ router.get('/state', requirePlayerSecret, async (req, res, next) => {
       games: availableGames.map((g) => ({ id: g._id, name: g.name })),
       players,
       inventorySize: LIMITS.INVENTORY_SIZE,
+      freeRerolls: LIMITS.FREE_REROLLS,
       updatedAt: new Date().toISOString()
     });
   } catch (err) {
@@ -247,6 +269,78 @@ router.post('/force', requirePlayerSecret, async (req, res, next) => {
     await Trade.create({ type: 'force', fromUserId: userId, toUserId: targetUserId, gameIdFrom: game._id, coinCost: game.forceReleaseCost });
 
     res.json({ ok: true, game: game.name });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------
+// POST /api/release  { userId, gameId }
+// Bails on a held (or forced-on-you) game the same way /complete does, but
+// marked released: no coins earned, streak resets, and it costs the same
+// coins as forcing that copy would — deducted the same way force is.
+// ---------------------------------------------------------------------
+router.post('/release', requirePlayerSecret, async (req, res, next) => {
+  try {
+    const { userId, gameId } = req.body;
+    const game = await Game.findOne({
+      _id: gameId,
+      ownerId: userId,
+      status: { $in: ['in_inventory', 'forced'] }
+    });
+    if (!game) return res.status(404).json({ error: 'That game is not in progress for this player.' });
+
+    const { coins } = await computeUserStats(userId);
+    if (coins < game.forceReleaseCost) {
+      return res.status(400).json({ error: `Releasing "${game.name}" costs ${game.forceReleaseCost} coins — you only have ${coins}.` });
+    }
+
+    game.status = 'finished';
+    game.released = true;
+    game.dateCompleted = new Date();
+    await game.save();
+
+    await Trade.create({ type: 'release', fromUserId: userId, toUserId: userId, gameIdFrom: game._id, coinCost: game.forceReleaseCost });
+
+    res.json({ ok: true, game: game.name });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------
+// POST /api/reroll  { userId, gameId }
+// Puts a held game back into the wheel pool as a plain available copy
+// (clears interestFor too, so it doesn't resurface as anyone's free pick).
+// First LIMITS.FREE_REROLLS are free per player, then scaling coin cost —
+// see rerollCost() in stats.js. Every reroll (even free ones) is logged so
+// the count persists across requests.
+// ---------------------------------------------------------------------
+router.post('/reroll', requirePlayerSecret, async (req, res, next) => {
+  try {
+    const { userId, gameId } = req.body;
+    const game = await Game.findOne({ _id: gameId, ownerId: userId, status: 'in_inventory' });
+    if (!game) return res.status(404).json({ error: 'That game is not in your hold.' });
+
+    const used = await rerollsUsedForUser(userId);
+    const cost = rerollCost(used + 1);
+
+    const { coins } = await computeUserStats(userId);
+    if (coins < cost) {
+      return res.status(400).json({ error: `Rerolling "${game.name}" costs ${cost} coins — you only have ${coins}.` });
+    }
+
+    game.status = 'available';
+    game.ownerId = null;
+    game.claimMethod = null;
+    game.forcedByUserId = null;
+    game.interestFor = null;
+    game.dateAssigned = null;
+    await game.save();
+
+    await Trade.create({ type: 'reroll', fromUserId: userId, toUserId: userId, gameIdFrom: game._id, coinCost: cost });
+
+    res.json({ ok: true, game: game.name, cost });
   } catch (err) {
     next(err);
   }

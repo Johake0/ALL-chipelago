@@ -1,8 +1,23 @@
 import express from 'express';
+import multer from 'multer';
 import User from '../models/User.js';
 import Game from '../models/Game.js';
 
 const router = express.Router();
+
+const AVATAR_MAX_BYTES = 3 * 1024 * 1024; // 3MB — plenty for a profile photo, keeps User docs small
+const ALLOWED_AVATAR_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: AVATAR_MAX_BYTES },
+  fileFilter(req, file, cb) {
+    if (!ALLOWED_AVATAR_TYPES.has(file.mimetype)) {
+      return cb(new Error('Unsupported image type — use PNG, JPEG, WEBP, or GIF.'));
+    }
+    cb(null, true);
+  }
+});
 
 function requireAdmin(req, res, next) {
   if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
@@ -31,6 +46,39 @@ router.patch('/users/:id', requireAdmin, async (req, res, next) => {
     const user = await User.findByIdAndUpdate(req.params.id, { username }, { new: true, runValidators: true });
     if (!user) return res.status(404).json({ error: 'User not found.' });
     res.json(user);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /users/:id/avatar — multipart upload (field name "avatar"), replaces
+// whatever avatar the user already had. Image bytes are stored inline on
+// the User document rather than on disk — see the User model for why.
+router.post('/users/:id/avatar', requireAdmin, (req, res, next) => {
+  avatarUpload.single('avatar')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No image file provided (field name "avatar").' });
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { avatar: { data: req.file.buffer, contentType: req.file.mimetype } },
+      { new: true }
+    );
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/users/:id/avatar', requireAdmin, async (req, res, next) => {
+  try {
+    const user = await User.findByIdAndUpdate(req.params.id, { avatar: { data: null, contentType: null } }, { new: true });
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

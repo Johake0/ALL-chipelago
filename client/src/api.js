@@ -57,3 +57,26 @@ export function adminFetch(path, options = {}) {
 export function publicFetch(path, options = {}) {
   return request(path, options, { 'x-player-secret': getPlayerSecret() });
 }
+
+// Avatar images are served unauthenticated (see the backend route) since
+// <img> tags can't attach the secret header — this just builds the URL.
+export function avatarUrl(userId) {
+  return `${API_URL}/api/users/${userId}/avatar`;
+}
+
+// FormData uploads can't go through request() — it always forces a JSON
+// Content-Type, which breaks multipart's auto-generated boundary. Browsers
+// set the correct Content-Type themselves as long as we never set one here.
+export async function adminUploadAvatar(userId, file) {
+  const formData = new FormData();
+  formData.append('avatar', file);
+  const res = await fetch(`${API_URL}/api/users/${userId}/avatar`, {
+    method: 'POST',
+    headers: { 'x-admin-secret': getAdminSecret() },
+    body: formData
+  });
+  const text = await res.text();
+  const body = text ? JSON.parse(text) : null;
+  if (!res.ok) throw new Error(body?.error || `Request failed (${res.status})`);
+  return body;
+}

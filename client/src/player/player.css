@@ -29,9 +29,89 @@
   color: transparent;
 }
 
-.player-picker {
+.current-player {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.current-player-name {
+  font-weight: 600;
+}
+
+.switch-profile-btn {
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  color: var(--text-dim);
+  font-size: 12px;
+  padding: 6px 12px;
+}
+
+/* --- Avatars --- */
+.avatar-img,
+.avatar-fallback {
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* --- Profile select --- */
+.profile-select {
+  text-align: center;
+  margin: 20px 0 40px;
+}
+
+.profile-select h2 {
   font-size: 16px;
-  padding: 8px 14px;
+  color: var(--text-dim);
+  font-weight: 400;
+  margin: 0 0 24px;
+}
+
+.profile-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 20px;
+}
+
+.profile-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  background: none;
+  border: none;
+  padding: 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.profile-card:hover {
+  background: var(--panel);
+}
+
+.profile-card:hover .avatar-img,
+.profile-card:hover .avatar-fallback {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.profile-name {
+  font-weight: 600;
+  font-size: 14px;
 }
 
 /* --- Wheel --- */
@@ -157,11 +237,19 @@
 }
 
 /* --- Panels --- */
+/* flexbox (not grid) so a row with fewer items than fit centers itself
+   instead of aligning left with dead space in the unused track. */
 .panel-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 16px;
   margin-bottom: 16px;
+}
+
+.panel-grid > .panel {
+  flex: 1 1 260px;
+  max-width: 420px;
 }
 
 .panel {
@@ -223,6 +311,47 @@
 
 .danger-btn {
   background: var(--danger);
+}
+
+.panel-grid > .bazaar-panel {
+  flex-basis: 100%;
+  max-width: none;
+}
+
+/* Same centering trick as .panel-grid: a leftover card alone on the last
+   row (e.g. Reroll) centers instead of hugging the left edge. */
+.bazaar-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+}
+
+.bazaar-card {
+  flex: 1 1 220px;
+  max-width: 300px;
+  background: var(--bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.bazaar-card h3 {
+  font-size: 13px;
+  margin: 0 0 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.bazaar-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.interest-section {
+  margin-bottom: 16px;
 }
 
 .pool-panel {

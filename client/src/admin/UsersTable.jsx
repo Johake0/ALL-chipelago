@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { adminFetch } from '../api.js'
+import { adminFetch, adminUploadAvatar, avatarUrl } from '../api.js'
 
 export default function UsersTable() {
   const [users, setUsers] = useState([])
@@ -55,6 +55,25 @@ export default function UsersTable() {
     }
   }
 
+  async function handleAvatarChange(user, file) {
+    if (!file) return
+    try {
+      await adminUploadAvatar(user._id, file)
+      load()
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
+  async function handleAvatarRemove(user) {
+    try {
+      await adminFetch(`/api/users/${user._id}/avatar`, { method: 'DELETE' })
+      load()
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
   if (loading) return <p>Loading users…</p>
 
   return (
@@ -65,10 +84,29 @@ export default function UsersTable() {
         <button type="submit">+ Add player</button>
       </form>
       <table>
-        <thead><tr><th>Username</th><th></th></tr></thead>
+        <thead><tr><th>Avatar</th><th>Username</th><th></th></tr></thead>
         <tbody>
-          {users.map((u) => (
+          {users.map((u) => {
+            const hasAvatar = !!u.avatar?.contentType
+            return (
             <tr key={u._id}>
+              <td>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {hasAvatar
+                    ? <img src={avatarUrl(u._id)} alt="" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
+                    : <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--panel-border)' }} />}
+                  <label style={{ fontSize: 12, cursor: 'pointer', color: 'var(--accent-2)' }}>
+                    Change
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      style={{ display: 'none' }}
+                      onChange={(e) => handleAvatarChange(u, e.target.files[0])}
+                    />
+                  </label>
+                  {hasAvatar && <button onClick={() => handleAvatarRemove(u)} style={{ fontSize: 12 }}>Remove</button>}
+                </div>
+              </td>
               <td>
                 {renaming === u._id
                   ? <input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} autoFocus />
@@ -88,7 +126,8 @@ export default function UsersTable() {
                 )}
               </td>
             </tr>
-          ))}
+            )
+          })}
         </tbody>
       </table>
     </div>
