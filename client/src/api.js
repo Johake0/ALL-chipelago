@@ -60,8 +60,11 @@ export function publicFetch(path, options = {}) {
 
 // Avatar images are served unauthenticated (see the backend route) since
 // <img> tags can't attach the secret header — this just builds the URL.
-export function avatarUrl(userId) {
-  return `${API_URL}/api/users/${userId}/avatar`;
+// `version` (pass the user's updatedAt) busts the browser's HTTP cache —
+// the route sends a long max-age, and without a changing query param the
+// <img src> stays byte-identical after a re-upload, so nothing re-fetches.
+export function avatarUrl(userId, version) {
+  return `${API_URL}/api/users/${userId}/avatar${version ? `?v=${encodeURIComponent(version)}` : ''}`;
 }
 
 // FormData uploads can't go through request() — it always forces a JSON

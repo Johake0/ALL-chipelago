@@ -93,7 +93,7 @@ export default function UsersTable() {
               <td>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {hasAvatar
-                    ? <img src={avatarUrl(u._id)} alt="" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
+                    ? <img src={avatarUrl(u._id, u.updatedAt)} alt="" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
                     : <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--panel-border)' }} />}
                   <label style={{ fontSize: 12, cursor: 'pointer', color: 'var(--accent-2)' }}>
                     Change

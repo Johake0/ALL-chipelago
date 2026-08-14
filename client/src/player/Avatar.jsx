@@ -12,7 +12,7 @@ export default function Avatar({ player, size = 96 }) {
   const style = { width: size, height: size, fontSize: size * 0.42 }
 
   if (player.hasAvatar) {
-    return <img className="avatar-img" style={style} src={avatarUrl(player.id)} alt={player.name} />
+    return <img className="avatar-img" style={style} src={avatarUrl(player.id, player.avatarUpdatedAt)} alt={player.name} />
   }
 
   return (

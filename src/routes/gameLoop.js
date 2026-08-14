@@ -66,6 +66,7 @@ router.get('/state', requirePlayerSecret, async (req, res, next) => {
           id: user._id,
           name: user.username,
           hasAvatar: !!user.avatar?.contentType,
+          avatarUpdatedAt: user.updatedAt,
           inventory: inventory.map((g) => ({ id: g._id, game: g.name, forceReleaseCost: g.forceReleaseCost })),
           inventoryCount,
           inventoryFull: inventoryCount >= LIMITS.INVENTORY_SIZE,
