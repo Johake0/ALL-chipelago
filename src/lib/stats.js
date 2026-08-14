@@ -7,6 +7,22 @@ const FREE_REROLLS = 5;
 const REROLL_BASE_COST = 500;
 const REROLL_STEP = 150;
 
+// Streak payout curve. Each real completion pays coinValue times a
+// multiplier that grows with the current streak (capped so a very long
+// streak can't inflate payouts without bound), and every MILESTONE_INTERVALth
+// consecutive completion pays a flat bonus on top that itself escalates —
+// the multiplier alone goes quiet past the cap, so this keeps a long streak
+// still meaningfully better than a short one. Calibrated against the real
+// catalog: avg coinValue ~206, avg forceReleaseCost ~824 (always exactly 4x
+// coinValue) — MILESTONE_BASE lands right around one average completion's
+// worth, so a milestone reads as "one free extra game" rather than an
+// arbitrary number.
+const STREAK_MULTIPLIER_RATE = 0.05;
+const STREAK_MULTIPLIER_CAP = 10;
+const MILESTONE_INTERVAL = 5;
+const MILESTONE_BASE = 200;
+const MILESTONE_STEP = 20;
+
 /**
  * Computes a user's coins, streak, and longest streak purely from their
  * finished/released games — mirrors the intent of your Sheet's formulas.
@@ -14,6 +30,10 @@ const REROLL_STEP = 150;
  * differed): walk a user's finished-or-released games in date order;
  * each real completion (released: false) extends the streak, each
  * released game resets it to 0. Longest streak is the max seen along the way.
+ * Since this is recomputed from the full log every time (never stored), the
+ * payout curve below applies retroactively to existing history too — a
+ * player's coin total will jump the first time this runs against their
+ * existing completions, not just on future ones.
  */
 export async function computeUserStats(userId) {
   const [history, coinCosts] = await Promise.all([
@@ -29,9 +49,16 @@ export async function computeUserStats(userId) {
     if (game.released) {
       streak = 0;
     } else {
-      coins += game.coinValue || 0;
       streak += 1;
       if (streak > longestStreak) longestStreak = streak;
+
+      const multiplier = 1 + STREAK_MULTIPLIER_RATE * Math.min(streak, STREAK_MULTIPLIER_CAP);
+      coins += Math.round((game.coinValue || 0) * multiplier);
+
+      if (streak % MILESTONE_INTERVAL === 0) {
+        const milestoneNumber = streak / MILESTONE_INTERVAL;
+        coins += MILESTONE_BASE + MILESTONE_STEP * (milestoneNumber - 1);
+      }
     }
   }
 
