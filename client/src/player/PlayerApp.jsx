@@ -147,7 +147,6 @@ function PlayerHome() {
           <div className="panel-grid">
             <InventoryList player={me} onAddToLobby={handleAddToLobby} hasLobbyEntry={!!myLobbyEntry} busy={busy} />
             <Lobby lobby={state.lobby} me={me} onComplete={handleComplete} onReturn={handleReturnFromLobby} busy={busy} />
-            <TrophyCase player={me} />
             <Bazaar
               me={me}
               players={state.players}
@@ -158,6 +157,7 @@ function PlayerHome() {
               freeRerolls={state.freeRerolls}
               busy={busy}
             />
+            <TrophyCase player={me} />
           </div>
 
           {me.freeClaimsRemaining > 0 && (
