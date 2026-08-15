@@ -1,6 +1,6 @@
 export default function TrophyCase({ player }) {
   return (
-    <section className="panel">
+    <section className="panel trophy-panel">
       <h2>Trophy Case</h2>
       {player.completedGames.length === 0 && <p className="empty">Nothing finished yet.</p>}
       {player.completedGames.map((g) => (

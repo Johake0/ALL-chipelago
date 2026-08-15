@@ -264,6 +264,10 @@
   margin: 0 0 12px;
 }
 
+.hold-heading {
+  color: var(--accent-2);
+}
+
 .panel form {
   display: flex;
   flex-direction: column;
@@ -314,7 +318,8 @@
 }
 
 .panel-grid > .bazaar-panel,
-.panel-grid > .lobby-panel {
+.panel-grid > .lobby-panel,
+.panel-grid > .trophy-panel {
   flex-basis: 100%;
   max-width: none;
 }

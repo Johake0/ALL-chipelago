@@ -4,7 +4,7 @@ export default function InventoryList({ player, onAddToLobby, hasLobbyEntry, bus
 
   return (
     <section className="panel">
-      <h2>Your Hold</h2>
+      <h2 className="hold-heading">Your Hold</h2>
       {empty && <p className="empty">Nothing yet — spin the wheel!</p>}
       {player.forceSlot && (
         <div className="hold-row forced">
