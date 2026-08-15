@@ -99,9 +99,23 @@ router.get('/state', requirePlayerSecret, async (req, res, next) => {
         .map((g) => ({ id: g._id, game: g.name }));
     }
 
+    // Shared lobby — every player's currently-in-progress-together game,
+    // visible site-wide (not scoped to the requesting player) since it's a
+    // shared "who's playing what right now" area for a 2-4 player session.
+    const lobbyGames = await Game.find({ status: 'lobby' }).populate('ownerId', 'username').lean();
+    const lobby = lobbyGames.map((g) => ({
+      id: g._id,
+      game: g.name,
+      ownerId: g.ownerId?._id,
+      ownerName: g.ownerId?.username,
+      coinValue: g.coinValue,
+      forceReleaseCost: g.forceReleaseCost
+    }));
+
     res.json({
       games: availableGames.map((g) => ({ id: g._id, name: g.name })),
       players,
+      lobby,
       inventorySize: LIMITS.INVENTORY_SIZE,
       freeRerolls: LIMITS.FREE_REROLLS,
       updatedAt: new Date().toISOString()
@@ -179,8 +193,10 @@ router.post('/claim-interest', requirePlayerSecret, async (req, res, next) => {
 
 // ---------------------------------------------------------------------
 // POST /api/complete  { userId, gameId }
-// Looks at a normal hold item OR a forced item — same "either state" logic
-// as the old completeForPlayer(), just expressed as one status check.
+// Only accepts games already in the shared lobby — a player has to move a
+// game there first (POST /api/lobby/add) before it can be marked finished.
+// This is a deliberate two-step flow (not just a UI nicety) so a stray
+// click on a hold item can never finish the wrong game outright.
 // ---------------------------------------------------------------------
 router.post('/complete', requirePlayerSecret, async (req, res, next) => {
   try {
@@ -188,12 +204,66 @@ router.post('/complete', requirePlayerSecret, async (req, res, next) => {
     const game = await Game.findOne({
       _id: gameId,
       ownerId: userId,
-      status: { $in: ['in_inventory', 'forced'] }
+      status: 'lobby'
     });
-    if (!game) return res.status(404).json({ error: 'That game is not in progress for this player.' });
+    if (!game) return res.status(404).json({ error: 'That game is not in the lobby for this player. Add it to the lobby first.' });
 
     game.status = 'finished';
     game.dateCompleted = new Date();
+    await game.save();
+
+    res.json({ ok: true, game: game.name });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------
+// POST /api/lobby/add  { userId, gameId }
+// Moves a held (or forced) game into the shared lobby, where it can later
+// be marked finished or returned to the hold. Capped at one lobby entry
+// per player at a time — the lobby represents "the one game you're
+// actively playing with the group right now."
+// ---------------------------------------------------------------------
+router.post('/lobby/add', requirePlayerSecret, async (req, res, next) => {
+  try {
+    const { userId, gameId } = req.body;
+
+    const alreadyInLobby = await Game.findOne({ ownerId: userId, status: 'lobby' });
+    if (alreadyInLobby) {
+      return res.status(400).json({ error: `You already have "${alreadyInLobby.name}" in the lobby — finish or return it first.` });
+    }
+
+    const game = await Game.findOne({
+      _id: gameId,
+      ownerId: userId,
+      status: { $in: ['in_inventory', 'forced'] }
+    });
+    if (!game) return res.status(404).json({ error: 'That game is not in your hold.' });
+
+    game.status = 'lobby';
+    await game.save();
+
+    res.json({ ok: true, game: game.name });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------
+// POST /api/lobby/return  { userId, gameId }
+// Pulls a game back out of the lobby into the hold, for "wrong game,
+// didn't mean to add that" recoveries. Restores 'forced' rather than
+// 'in_inventory' if forcedByUserId is set, since that field is never
+// cleared once a game has been forced onto someone.
+// ---------------------------------------------------------------------
+router.post('/lobby/return', requirePlayerSecret, async (req, res, next) => {
+  try {
+    const { userId, gameId } = req.body;
+    const game = await Game.findOne({ _id: gameId, ownerId: userId, status: 'lobby' });
+    if (!game) return res.status(404).json({ error: 'That game is not in the lobby for this player.' });
+
+    game.status = game.forcedByUserId ? 'forced' : 'in_inventory';
     await game.save();
 
     res.json({ ok: true, game: game.name });

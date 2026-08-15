@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useGameState } from './useGameState.js'
-import { spin, completeGame, claimInterest, trade, force, release, reroll } from './playerApi.js'
+import { spin, completeGame, claimInterest, trade, force, release, reroll, addToLobby, returnFromLobby } from './playerApi.js'
 import Wheel from './Wheel.jsx'
 import StatsBar from './StatsBar.jsx'
 import InventoryList from './InventoryList.jsx'
 import InterestPicks from './InterestPicks.jsx'
 import TrophyCase from './TrophyCase.jsx'
+import Lobby from './Lobby.jsx'
 import Bazaar from './Bazaar.jsx'
 import GamesPool from './GamesPool.jsx'
 import PassGate from './PassGate.jsx'
@@ -40,6 +41,7 @@ function PlayerHome() {
   const [spinLocked, setSpinLocked] = useState(false)
 
   const me = useMemo(() => state?.players.find((p) => p.id === playerId), [state, playerId])
+  const myLobbyEntry = useMemo(() => state?.lobby?.find((item) => item.ownerId === playerId), [state, playerId])
 
   const wheelSegments = useMemo(() => {
     if (!state) return []
@@ -102,6 +104,8 @@ function PlayerHome() {
     runAction(() => force(me.id, gameId, targetUserId), 'Game forced!')
   const handleRelease = (gameId) => runAction(() => release(me.id, gameId), 'Game released.')
   const handleReroll = (gameId) => runAction(() => reroll(me.id, gameId), 'Game rerolled back into the pool!')
+  const handleAddToLobby = (gameId) => runAction(() => addToLobby(me.id, gameId), `${me.name} added a game to the Lobby!`)
+  const handleReturnFromLobby = (gameId) => runAction(() => returnFromLobby(me.id, gameId), 'Game returned to your hold.')
 
   if (error) return <p className="load-error">Couldn't reach the server: {error}</p>
   if (!state) return <p className="loading">Loading…</p>
@@ -141,7 +145,8 @@ function PlayerHome() {
           <StatsBar player={me} inventorySize={state.inventorySize} />
 
           <div className="panel-grid">
-            <InventoryList player={me} onComplete={handleComplete} busy={busy} />
+            <InventoryList player={me} onAddToLobby={handleAddToLobby} hasLobbyEntry={!!myLobbyEntry} busy={busy} />
+            <Lobby lobby={state.lobby} me={me} onComplete={handleComplete} onReturn={handleReturnFromLobby} busy={busy} />
             <TrophyCase player={me} />
             <Bazaar
               me={me}

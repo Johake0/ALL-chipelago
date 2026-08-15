@@ -22,7 +22,11 @@ const gameSchema = new mongoose.Schema(
       // jump straight to 'in_inventory' on claim — same as the original
       // Sheet design. Kept in the enum in case you want an explicit
       // "reserved, not yet claimed" state later.
-      enum: ['available', 'personal_list', 'in_inventory', 'forced', 'finished'],
+      // 'lobby' is the shared "currently being played" holding area: a
+      // player moves a game here from in_inventory/forced instead of
+      // completing it directly, and /api/complete only accepts games in
+      // this status — see gameLoop.js's /api/lobby/* routes.
+      enum: ['available', 'personal_list', 'in_inventory', 'forced', 'lobby', 'finished'],
       default: 'available',
       index: true
     },

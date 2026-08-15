@@ -80,9 +80,14 @@ export function rerollCost(rerollNumber) {
 }
 
 export async function inventoryCountForUser(userId) {
+  // Includes 'lobby' so moving a game to the lobby doesn't free up a hold
+  // slot to spin an extra game with — it's still a copy the player is
+  // committed to, just displayed in a different area while it's actively
+  // being played. ('forced' is deliberately excluded, same as before: a
+  // forced game is imposed outside the normal hold-cap flow.)
   return Game.countDocuments({
     ownerId: userId,
-    status: { $in: ['in_inventory'] }
+    status: { $in: ['in_inventory', 'lobby'] }
   });
 }
 

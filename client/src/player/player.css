@@ -313,9 +313,37 @@
   background: var(--danger);
 }
 
-.panel-grid > .bazaar-panel {
+.panel-grid > .bazaar-panel,
+.panel-grid > .lobby-panel {
   flex-basis: 100%;
   max-width: none;
+}
+
+/* --- Lobby --- */
+.lobby-hint {
+  color: var(--text-dim);
+  font-size: 12px;
+  margin: -6px 0 12px;
+}
+
+.lobby-row {
+  flex-wrap: wrap;
+}
+
+.lobby-owner {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.lobby-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ghost-btn {
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  color: var(--text-dim);
 }
 
 /* Same centering trick as .panel-grid: a leftover card alone on the last

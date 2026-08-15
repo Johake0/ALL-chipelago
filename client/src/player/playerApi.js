@@ -8,6 +8,12 @@ export const spin = (userId) =>
 export const completeGame = (userId, gameId) =>
   publicFetch('/api/complete', { method: 'POST', body: JSON.stringify({ userId, gameId }) })
 
+export const addToLobby = (userId, gameId) =>
+  publicFetch('/api/lobby/add', { method: 'POST', body: JSON.stringify({ userId, gameId }) })
+
+export const returnFromLobby = (userId, gameId) =>
+  publicFetch('/api/lobby/return', { method: 'POST', body: JSON.stringify({ userId, gameId }) })
+
 export const claimInterest = (userId, gameId) =>
   publicFetch('/api/claim-interest', { method: 'POST', body: JSON.stringify({ userId, gameId }) })
 
