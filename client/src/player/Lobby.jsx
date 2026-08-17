@@ -5,8 +5,9 @@ import { useEffect, useRef, useState } from 'react'
 // finish a game.
 const CONFIRM_TIMEOUT_MS = 5000
 
-export default function Lobby({ lobby, me, onComplete, onReturn, busy }) {
+export default function Lobby({ lobby, me, onComplete, onReturn, onRelease, busy }) {
   const [confirmingId, setConfirmingId] = useState('')
+  const [releaseTarget, setReleaseTarget] = useState(null)
   const timeoutRef = useRef(null)
 
   useEffect(() => () => clearTimeout(timeoutRef.current), [])
@@ -27,6 +28,12 @@ export default function Lobby({ lobby, me, onComplete, onReturn, busy }) {
     clearTimeout(timeoutRef.current)
     setConfirmingId('')
     onReturn(item.id)
+  }
+
+  function confirmRelease() {
+    if (!releaseTarget) return
+    onRelease(releaseTarget.id)
+    setReleaseTarget(null)
   }
 
   return (
@@ -54,11 +61,31 @@ export default function Lobby({ lobby, me, onComplete, onReturn, busy }) {
                 <button type="button" className="ghost-btn" onClick={() => handleReturnClick(item)} disabled={busy}>
                   Return to Hold
                 </button>
+                <button type="button" className="ghost-btn danger-text" onClick={() => setReleaseTarget(item)} disabled={busy}>
+                  Release
+                </button>
               </div>
             )}
           </div>
         )
       })}
+
+      {releaseTarget && (
+        <div className="modal-overlay" onClick={() => setReleaseTarget(null)}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <h3>Release {releaseTarget.game}?</h3>
+            <p>
+              This costs <strong>{releaseTarget.forceReleaseCost} coins</strong> and earns nothing —
+              and it will reset your current streak{me.streak > 0 ? ` (currently ${me.streak})` : ''} back to 0.
+              This can't be undone. Are you <em>really</em> sure?
+            </p>
+            <div className="modal-actions">
+              <button type="button" className="ghost-btn" onClick={() => setReleaseTarget(null)}>Cancel, keep playing</button>
+              <button type="button" className="danger-btn" onClick={confirmRelease} disabled={busy}>Yes, release it</button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

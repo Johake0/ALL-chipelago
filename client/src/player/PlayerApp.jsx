@@ -160,7 +160,7 @@ function PlayerHome() {
 
               <div className="panel-grid">
                 <InventoryList player={me} onAddToLobby={handleAddToLobby} hasLobbyEntry={!!myLobbyEntry} busy={busy} />
-                <Lobby lobby={state.lobby} me={me} onComplete={handleComplete} onReturn={handleReturnFromLobby} busy={busy} />
+                <Lobby lobby={state.lobby} me={me} onComplete={handleComplete} onReturn={handleReturnFromLobby} onRelease={handleRelease} busy={busy} />
                 <Bazaar
                   me={me}
                   players={state.players}

@@ -42,16 +42,27 @@ is about how the code implements it.
   two-step flow — a stray click on a hold item can't finish the wrong
   game. `POST /api/lobby/return` reverses it back to `in_inventory` (or
   `forced`, if `forcedByUserId` is set) for "wrong game" recoveries.
-  **`POST /api/release` deliberately does NOT require lobby status** —
-  it only ever operates on `in_inventory`/`forced` hold items, same as
-  before the Lobby existed. This is intentional, not an oversight: the
-  Lobby represents an active shared multiworld session with other
-  players, and Archipelago sessions are interconnected (items/checks
-  flow between everyone's connected games) — someone bailing out of a
-  game that's currently in the shared Lobby would disrupt that session
-  for the whole group. Releasing has to stay a hold-only action so a
-  player can back out of a game *before* committing it to a group
-  session, not while it's actively part of one.
+  **`POST /api/release` now also accepts `'lobby'` status**, alongside
+  `in_inventory`/`forced` — changed from an earlier version of this file,
+  which argued release should be hold-only because bailing out of a game
+  in the shared Lobby would disrupt an active multiworld session with
+  other players. **Settled: this stays allowed even after Session/lock-in
+  is built (Phase 2 below), not just from a pre-lock-in Lobby entry** — if
+  a game turns out to be too hard or otherwise not fun once a session's
+  already running, a player should still be able to bail via Release
+  (same coin cost + streak reset as always) rather than being stuck. This
+  was an open question flagged here previously ("revisit once lock-in
+  exists") and is now resolved — Phase 2's session-close logic just needs
+  to handle a member releasing instead of finishing their session game
+  (e.g. treat it the same as if they'd never confirmed done, or drop them
+  from the pending-coins exclusion — decide the exact mechanics when
+  building that part, but the *policy* itself is decided). The frontend
+  (`Lobby.jsx`) gates this behind a strong confirmation modal (not the
+  lighter 2-click pattern `POST /api/complete` uses) — it shows the coin
+  cost, the current streak that's about to be lost, and requires an
+  explicit "Yes, release it" click — since this is a real, unrecoverable,
+  costly action a player might trigger from right
+  next to the low-stakes "Return to Hold" button.
 - **Coins/streak/longestStreak are never stored** — always computed from
   the game log on read (`computeUserStats` in `src/lib/stats.js`),
   mirroring how the old Sheet's formulas worked. Coin costs from

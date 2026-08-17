@@ -391,9 +391,12 @@ router.post('/force', requirePlayerSecret, async (req, res, next) => {
 
 // ---------------------------------------------------------------------
 // POST /api/release  { userId, gameId }
-// Bails on a held (or forced-on-you) game the same way /complete does, but
-// marked released: no coins earned, streak resets, and it costs the same
-// coins as forcing that copy would — deducted the same way force is.
+// Bails on a held (forced-on-you, or currently-in-the-Lobby) game the same
+// way /complete does, but marked released: no coins earned, streak resets,
+// and it costs the same coins as forcing that copy would — deducted the
+// same way force is. Releasing from 'lobby' status is allowed as of this
+// change — see CLAUDE.md's Lobby note for why that's fine today (no real
+// multiplayer Session/lock-in exists yet) but worth revisiting once one does.
 // ---------------------------------------------------------------------
 router.post('/release', requirePlayerSecret, async (req, res, next) => {
   try {
@@ -401,7 +404,7 @@ router.post('/release', requirePlayerSecret, async (req, res, next) => {
     const game = await Game.findOne({
       _id: gameId,
       ownerId: userId,
-      status: { $in: ['in_inventory', 'forced'] }
+      status: { $in: ['in_inventory', 'forced', 'lobby'] }
     });
     if (!game) return res.status(404).json({ error: 'That game is not in progress for this player.' });
 
