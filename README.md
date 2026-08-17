@@ -1,4 +1,4 @@
-# AR-Chipelago
+# ALL-Chipelago
 
 **Alternate Reality**-Archipelago. The purpose of this repo is to host our custom 'EveryWorld' system.
 
