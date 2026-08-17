@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import Game from '../models/Game.js';
 import User from '../models/User.js';
 import Trade from '../models/Trade.js';
-import { computeUserStats, inventoryCountForUser, freeClaimsUsedForUser, rerollsUsedForUser, rerollCost, LIMITS } from '../lib/stats.js';
+import { computeUserStats, inventoryCountForUser, freeClaimsUsedForUser, rerollsUsedForUser, rerollCost, timesForcedForUser, LIMITS } from '../lib/stats.js';
 
 const router = express.Router();
 
@@ -52,14 +52,15 @@ router.get('/state', requirePlayerSecret, async (req, res, next) => {
 
     const players = await Promise.all(
       users.map(async (user) => {
-        const [inventory, forceSlotDoc, completedGames, stats, inventoryCount, freeClaimsUsed, rerollsUsed] = await Promise.all([
+        const [inventory, forceSlotDoc, completedGames, stats, inventoryCount, freeClaimsUsed, rerollsUsed, timesForced] = await Promise.all([
           Game.find({ ownerId: user._id, status: 'in_inventory' }).lean(),
           Game.findOne({ ownerId: user._id, status: 'forced' }).lean(),
           Game.find({ ownerId: user._id, status: 'finished' }).lean(),
           computeUserStats(user._id),
           inventoryCountForUser(user._id),
           freeClaimsUsedForUser(user._id),
-          rerollsUsedForUser(user._id)
+          rerollsUsedForUser(user._id),
+          timesForcedForUser(user._id)
         ]);
 
         return {
@@ -81,7 +82,8 @@ router.get('/state', requirePlayerSecret, async (req, res, next) => {
           freeClaimsRemaining: Math.max(0, LIMITS.FREE_INTEREST_PICKS - freeClaimsUsed),
           rerollsUsed,
           nextRerollCost: rerollCost(rerollsUsed + 1),
-          ...stats // coins, streak, longestStreak
+          timesForced,
+          ...stats // coins, streak, longestStreak, totalEarned
         };
       })
     );
@@ -307,6 +309,38 @@ router.post('/trade', requirePlayerSecret, async (req, res, next) => {
 });
 
 // ---------------------------------------------------------------------
+// POST /api/gift  { userId, targetUserId, amount }
+// Straight coin transfer, no game involved. Logged as a Trade like every
+// other coin movement — computeUserStats subtracts it from the sender and
+// adds it to the recipient, so there's no separate balance to keep in sync.
+// ---------------------------------------------------------------------
+router.post('/gift', requirePlayerSecret, async (req, res, next) => {
+  try {
+    const { userId, targetUserId, amount } = req.body;
+    if (userId === targetUserId) return res.status(400).json({ error: "Can't gift yourself." });
+
+    const parsedAmount = Number(amount);
+    if (!Number.isInteger(parsedAmount) || parsedAmount <= 0) {
+      return res.status(400).json({ error: 'Gift amount must be a positive whole number.' });
+    }
+
+    const targetUser = await User.findById(targetUserId);
+    if (!targetUser) return res.status(404).json({ error: 'Unknown target player.' });
+
+    const { coins } = await computeUserStats(userId);
+    if (coins < parsedAmount) {
+      return res.status(400).json({ error: `You only have ${coins} coins.` });
+    }
+
+    await Trade.create({ type: 'gift', fromUserId: userId, toUserId: targetUserId, coinCost: parsedAmount });
+
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------
 // POST /api/force  { userId, gameId, targetUserId }
 // Forcing costs the forcer game.forceReleaseCost coins, deducted via a
 // Trade log entry (see computeUserStats) rather than a stored balance.
@@ -412,6 +446,94 @@ router.post('/reroll', requirePlayerSecret, async (req, res, next) => {
     await Trade.create({ type: 'reroll', fromUserId: userId, toUserId: userId, gameIdFrom: game._id, coinCost: cost });
 
     res.json({ ok: true, game: game.name, cost });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------
+// GET /api/activity — recent events, newest first. Not a stored log — it's
+// assembled on read from data that already exists: Game.dateAssigned for
+// spin/interest claims, Game.dateCompleted (released: false) for finishes,
+// and the Trade collection for trade/force/release/reroll (which already
+// logs each of those with a timestamp). Each source query is capped at
+// LIMIT before merging, which is enough — the eventual top LIMIT globally
+// can never need more than LIMIT from any single source.
+// ---------------------------------------------------------------------
+router.get('/activity', requirePlayerSecret, async (req, res, next) => {
+  try {
+    const LIMIT = 50;
+
+    const [assignedGames, finishedGames, trades] = await Promise.all([
+      Game.find({ dateAssigned: { $ne: null } }).sort({ dateAssigned: -1 }).limit(LIMIT).populate('ownerId', 'username').lean(),
+      Game.find({ status: 'finished', released: false }).sort({ dateCompleted: -1 }).limit(LIMIT).populate('ownerId', 'username').lean(),
+      Trade.find({ type: { $in: ['trade', 'force', 'release', 'reroll'] } })
+        .sort({ createdAt: -1 })
+        .limit(LIMIT)
+        .populate('fromUserId', 'username')
+        .populate('toUserId', 'username')
+        .populate('gameIdFrom', 'name')
+        .populate('gameIdTo', 'name')
+        .lean()
+    ]);
+
+    const events = [];
+
+    for (const g of assignedGames) {
+      if (!g.ownerId) continue;
+      events.push({
+        type: g.claimMethod === 'interest' ? 'interest' : 'spin',
+        at: g.dateAssigned,
+        actor: g.ownerId.username,
+        game: g.name
+      });
+    }
+
+    for (const g of finishedGames) {
+      if (!g.ownerId) continue;
+      events.push({
+        type: 'finish',
+        at: g.dateCompleted,
+        actor: g.ownerId.username,
+        game: g.name,
+        coinValue: g.coinValue
+      });
+    }
+
+    for (const t of trades) {
+      // A referenced user/game can go missing if it was later deleted (no
+      // cascading cleanup on delete — see CLAUDE.md's "Not built yet").
+      // populate() resolves those to null, so skip rather than show a
+      // broken "undefined did X" line in the feed.
+      if (!t.fromUserId || !t.gameIdFrom) continue;
+      if (t.type === 'trade' && (!t.toUserId || !t.gameIdTo)) continue;
+      if (t.type === 'force' && !t.toUserId) continue;
+
+      if (t.type === 'trade') {
+        events.push({
+          type: 'trade',
+          at: t.createdAt,
+          actor: t.fromUserId?.username,
+          target: t.toUserId?.username,
+          game: t.gameIdFrom?.name,
+          targetGame: t.gameIdTo?.name
+        });
+      } else {
+        // force/release/reroll all share the same one-directional shape
+        events.push({
+          type: t.type,
+          at: t.createdAt,
+          actor: t.fromUserId?.username,
+          target: t.type === 'force' ? t.toUserId?.username : undefined,
+          game: t.gameIdFrom?.name,
+          coinCost: t.coinCost
+        });
+      }
+    }
+
+    events.sort((a, b) => new Date(b.at) - new Date(a.at));
+
+    res.json({ events: events.slice(0, LIMIT) });
   } catch (err) {
     next(err);
   }

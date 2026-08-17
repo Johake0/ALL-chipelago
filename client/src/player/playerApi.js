@@ -28,3 +28,8 @@ export const release = (userId, gameId) =>
 
 export const reroll = (userId, gameId) =>
   publicFetch('/api/reroll', { method: 'POST', body: JSON.stringify({ userId, gameId }) })
+
+export const getActivity = () => publicFetch('/api/activity')
+
+export const gift = (userId, targetUserId, amount) =>
+  publicFetch('/api/gift', { method: 'POST', body: JSON.stringify({ userId, targetUserId, amount }) })

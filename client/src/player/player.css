@@ -319,7 +319,8 @@
 
 .panel-grid > .bazaar-panel,
 .panel-grid > .lobby-panel,
-.panel-grid > .trophy-panel {
+.panel-grid > .trophy-panel,
+.panel-grid > .leaderboard-panel {
   flex-basis: 100%;
   max-width: none;
 }
@@ -415,4 +416,86 @@
   text-align: center;
   padding: 60px 20px;
   color: var(--text-dim);
+}
+
+/* --- Leaderboard --- */
+.leaderboard-scroll {
+  overflow-x: auto;
+}
+
+.leaderboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.leaderboard-table th,
+.leaderboard-table td {
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.leaderboard-table thead th {
+  color: var(--text-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.leaderboard-table thead th.sorted {
+  color: var(--accent-2);
+}
+
+.leaderboard-table tbody tr:not(:last-child) td {
+  border-bottom: 1px dashed var(--panel-border);
+}
+
+.leaderboard-rank {
+  color: var(--text-dim);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.leaderboard-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+/* --- View tabs --- */
+.view-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.view-tabs button {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 10px 18px;
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+.view-tabs button.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+/* --- Activity feed --- */
+.activity-panel {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.activity-row {
+  font-size: 13px;
 }

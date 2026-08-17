@@ -36,12 +36,15 @@ const MILESTONE_STEP = 20;
  * existing completions, not just on future ones.
  */
 export async function computeUserStats(userId) {
-  const [history, coinCosts] = await Promise.all([
+  const [history, coinCosts, giftsReceived] = await Promise.all([
     Game.find({ ownerId: userId, status: 'finished' }).sort({ dateCompleted: 1 }).lean(),
-    Trade.find({ type: { $in: ['force', 'release', 'reroll'] }, fromUserId: userId }).lean()
+    // Gifts sent are subtracted the same way force/release/reroll costs
+    // are — fromUserId paid coinCost to make this happen either way.
+    Trade.find({ type: { $in: ['force', 'release', 'reroll', 'gift'] }, fromUserId: userId }).lean(),
+    Trade.find({ type: 'gift', toUserId: userId }).lean()
   ]);
 
-  let coins = 0;
+  let totalEarned = 0;
   let streak = 0;
   let longestStreak = 0;
 
@@ -53,22 +56,36 @@ export async function computeUserStats(userId) {
       if (streak > longestStreak) longestStreak = streak;
 
       const multiplier = 1 + STREAK_MULTIPLIER_RATE * Math.min(streak, STREAK_MULTIPLIER_CAP);
-      coins += Math.round((game.coinValue || 0) * multiplier);
+      totalEarned += Math.round((game.coinValue || 0) * multiplier);
 
       if (streak % MILESTONE_INTERVAL === 0) {
         const milestoneNumber = streak / MILESTONE_INTERVAL;
-        coins += MILESTONE_BASE + MILESTONE_STEP * (milestoneNumber - 1);
+        totalEarned += MILESTONE_BASE + MILESTONE_STEP * (milestoneNumber - 1);
       }
     }
   }
 
-  coins -= coinCosts.reduce((sum, t) => sum + (t.coinCost || 0), 0);
+  // totalEarned is a pure lifetime-earnings figure (leaderboard "coins
+  // earned" bragging stat) — it only ever grows, unaffected by spending or
+  // gifts in either direction, so it can't be inflated by hoarding/gifting
+  // games between friends. coins is the actual spendable balance: costs
+  // (including gifts sent) get subtracted, gifts received get added — none
+  // of that touches totalEarned.
+  const spent = coinCosts.reduce((sum, t) => sum + (t.coinCost || 0), 0);
+  const received = giftsReceived.reduce((sum, t) => sum + (t.coinCost || 0), 0);
+  const coins = totalEarned - spent + received;
 
-  return { coins, streak, longestStreak };
+  return { coins, streak, longestStreak, totalEarned };
 }
 
 export async function rerollsUsedForUser(userId) {
   return Trade.countDocuments({ fromUserId: userId, type: 'reroll' });
+}
+
+// How many times this player has forced a game onto someone else — a
+// leaderboard stat, not used for any limit/cost logic.
+export async function timesForcedForUser(userId) {
+  return Trade.countDocuments({ fromUserId: userId, type: 'force' });
 }
 
 // rerollNumber is 1-indexed (the 1st reroll ever = 1). The first

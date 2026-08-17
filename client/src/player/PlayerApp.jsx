@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useGameState } from './useGameState.js'
-import { spin, completeGame, claimInterest, trade, force, release, reroll, addToLobby, returnFromLobby } from './playerApi.js'
+import { spin, completeGame, claimInterest, trade, force, release, reroll, addToLobby, returnFromLobby, gift } from './playerApi.js'
 import Wheel from './Wheel.jsx'
 import StatsBar from './StatsBar.jsx'
 import InventoryList from './InventoryList.jsx'
@@ -8,6 +8,8 @@ import InterestPicks from './InterestPicks.jsx'
 import TrophyCase from './TrophyCase.jsx'
 import Lobby from './Lobby.jsx'
 import Bazaar from './Bazaar.jsx'
+import Leaderboard from './Leaderboard.jsx'
+import Activity from './Activity.jsx'
 import GamesPool from './GamesPool.jsx'
 import PassGate from './PassGate.jsx'
 import ProfileSelect from './ProfileSelect.jsx'
@@ -34,6 +36,7 @@ export default function PlayerApp() {
 function PlayerHome() {
   const { state, error, refresh } = useGameState()
   const [playerId, setPlayerId] = useState(() => localStorage.getItem(PLAYER_KEY) || '')
+  const [view, setView] = useState('game') // 'game' | 'activity'
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
   const [spinToken, setSpinToken] = useState(0)
@@ -104,6 +107,8 @@ function PlayerHome() {
     runAction(() => force(me.id, gameId, targetUserId), 'Game forced!')
   const handleRelease = (gameId) => runAction(() => release(me.id, gameId), 'Game released.')
   const handleReroll = (gameId) => runAction(() => reroll(me.id, gameId), 'Game rerolled back into the pool!')
+  const handleGift = ({ targetUserId, amount }) =>
+    runAction(() => gift(me.id, targetUserId, amount), `Sent ${amount} coins!`)
   const handleAddToLobby = (gameId) => runAction(() => addToLobby(me.id, gameId), `${me.name} added a game to the Lobby!`)
   const handleReturnFromLobby = (gameId) => runAction(() => returnFromLobby(me.id, gameId), 'Game returned to your hold.')
 
@@ -129,44 +134,57 @@ function PlayerHome() {
         <ProfileSelect players={state.players} onSelect={selectPlayer} />
       ) : (
         <>
-          <Wheel
-            segments={wheelSegments}
-            spinToken={spinToken}
-            winner={winner}
-            spinning={spinLocked}
-            disabled={me.inventoryFull || state.games.length === 0}
-            disabledReason={me.inventoryFull ? 'Your hold is full.' : state.games.length === 0 ? 'No games left in the pool.' : ''}
-            onSpin={handleSpin}
-            onLanded={handleWheelLanded}
-          />
+          <nav className="view-tabs">
+            <button type="button" className={view === 'game' ? 'active' : ''} onClick={() => setView('game')}>Play</button>
+            <button type="button" className={view === 'activity' ? 'active' : ''} onClick={() => setView('activity')}>Activity Feed</button>
+          </nav>
 
-          {status && <p className="status-msg">{status}</p>}
+          {view === 'activity' ? (
+            <Activity />
+          ) : (
+            <>
+              <Wheel
+                segments={wheelSegments}
+                spinToken={spinToken}
+                winner={winner}
+                spinning={spinLocked}
+                disabled={me.inventoryFull || state.games.length === 0}
+                disabledReason={me.inventoryFull ? 'Your hold is full.' : state.games.length === 0 ? 'No games left in the pool.' : ''}
+                onSpin={handleSpin}
+                onLanded={handleWheelLanded}
+              />
 
-          <StatsBar player={me} inventorySize={state.inventorySize} />
+              {status && <p className="status-msg">{status}</p>}
 
-          <div className="panel-grid">
-            <InventoryList player={me} onAddToLobby={handleAddToLobby} hasLobbyEntry={!!myLobbyEntry} busy={busy} />
-            <Lobby lobby={state.lobby} me={me} onComplete={handleComplete} onReturn={handleReturnFromLobby} busy={busy} />
-            <Bazaar
-              me={me}
-              players={state.players}
-              onTrade={handleTrade}
-              onForce={handleForce}
-              onRelease={handleRelease}
-              onReroll={handleReroll}
-              freeRerolls={state.freeRerolls}
-              busy={busy}
-            />
-            <TrophyCase player={me} />
-          </div>
+              <StatsBar player={me} inventorySize={state.inventorySize} />
 
-          {me.freeClaimsRemaining > 0 && (
-            <div className="interest-section">
-              <InterestPicks player={me} onClaim={handleClaimInterest} busy={busy} />
-            </div>
+              <div className="panel-grid">
+                <InventoryList player={me} onAddToLobby={handleAddToLobby} hasLobbyEntry={!!myLobbyEntry} busy={busy} />
+                <Lobby lobby={state.lobby} me={me} onComplete={handleComplete} onReturn={handleReturnFromLobby} busy={busy} />
+                <Bazaar
+                  me={me}
+                  players={state.players}
+                  onTrade={handleTrade}
+                  onForce={handleForce}
+                  onRelease={handleRelease}
+                  onReroll={handleReroll}
+                  onGift={handleGift}
+                  freeRerolls={state.freeRerolls}
+                  busy={busy}
+                />
+                <Leaderboard players={state.players} />
+                <TrophyCase player={me} />
+              </div>
+
+              {me.freeClaimsRemaining > 0 && (
+                <div className="interest-section">
+                  <InterestPicks player={me} onClaim={handleClaimInterest} busy={busy} />
+                </div>
+              )}
+
+              <GamesPool games={state.games} />
+            </>
           )}
-
-          <GamesPool games={state.games} />
         </>
       )}
     </div>
