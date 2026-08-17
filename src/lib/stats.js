@@ -1,5 +1,6 @@
 import Game from '../models/Game.js';
 import Trade from '../models/Trade.js';
+import { BONUS_MULTIPLIER } from './bonusGame.js';
 
 const INVENTORY_SIZE = 10;
 const FREE_INTEREST_PICKS = 3;
@@ -56,7 +57,8 @@ export async function computeUserStats(userId) {
       if (streak > longestStreak) longestStreak = streak;
 
       const multiplier = 1 + STREAK_MULTIPLIER_RATE * Math.min(streak, STREAK_MULTIPLIER_CAP);
-      totalEarned += Math.round((game.coinValue || 0) * multiplier);
+      const bonusFactor = game.bonusOnComplete ? BONUS_MULTIPLIER : 1;
+      totalEarned += Math.round((game.coinValue || 0) * multiplier * bonusFactor);
 
       if (streak % MILESTONE_INTERVAL === 0) {
         const milestoneNumber = streak / MILESTONE_INTERVAL;

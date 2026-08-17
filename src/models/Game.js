@@ -43,7 +43,15 @@ const gameSchema = new mongoose.Schema(
     removed: { type: Boolean, default: false },  // manual exclude from the wheel, same as the old checkbox/list
 
     dateAssigned: { type: Date, default: null },
-    dateCompleted: { type: Date, default: null }
+    dateCompleted: { type: Date, default: null },
+
+    // True iff this copy was the owner's flagged bonus game (User.bonusGameId)
+    // at the exact moment /api/complete ran — set permanently then, since the
+    // flag itself is mutable and can move to a different game before payout
+    // would otherwise be computed. computeUserStats needs this immutable
+    // per-game record, not a live re-check of the (now possibly different)
+    // current flag.
+    bonusOnComplete: { type: Boolean, default: false }
   },
   { timestamps: true }
 );

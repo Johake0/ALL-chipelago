@@ -4,6 +4,7 @@ import Game from '../models/Game.js';
 import User from '../models/User.js';
 import Trade from '../models/Trade.js';
 import { computeUserStats, inventoryCountForUser, freeClaimsUsedForUser, rerollsUsedForUser, rerollCost, timesForcedForUser, LIMITS } from '../lib/stats.js';
+import { maybeRerollOnHoldRefill, currentBonusGame } from '../lib/bonusGame.js';
 
 const router = express.Router();
 
@@ -52,7 +53,7 @@ router.get('/state', requirePlayerSecret, async (req, res, next) => {
 
     const players = await Promise.all(
       users.map(async (user) => {
-        const [inventory, forceSlotDoc, completedGames, stats, inventoryCount, freeClaimsUsed, rerollsUsed, timesForced] = await Promise.all([
+        const [inventory, forceSlotDoc, completedGames, stats, inventoryCount, freeClaimsUsed, rerollsUsed, timesForced, bonusGame] = await Promise.all([
           Game.find({ ownerId: user._id, status: 'in_inventory' }).lean(),
           Game.findOne({ ownerId: user._id, status: 'forced' }).lean(),
           Game.find({ ownerId: user._id, status: 'finished' }).lean(),
@@ -60,7 +61,8 @@ router.get('/state', requirePlayerSecret, async (req, res, next) => {
           inventoryCountForUser(user._id),
           freeClaimsUsedForUser(user._id),
           rerollsUsedForUser(user._id),
-          timesForcedForUser(user._id)
+          timesForcedForUser(user._id),
+          currentBonusGame(user._id)
         ]);
 
         return {
@@ -83,6 +85,7 @@ router.get('/state', requirePlayerSecret, async (req, res, next) => {
           rerollsUsed,
           nextRerollCost: rerollCost(rerollsUsed + 1),
           timesForced,
+          bonusGameId: bonusGame?._id ?? null,
           ...stats // coins, streak, longestStreak, totalEarned
         };
       })
@@ -153,6 +156,8 @@ router.post('/spin', requirePlayerSecret, async (req, res, next) => {
     winner.dateAssigned = new Date();
     await winner.save();
 
+    await maybeRerollOnHoldRefill(userId, count, count + 1);
+
     res.json({ winner: winner.name, winnerId: winner._id });
   } catch (err) {
     next(err);
@@ -187,6 +192,8 @@ router.post('/claim-interest', requirePlayerSecret, async (req, res, next) => {
     game.dateAssigned = new Date();
     await game.save();
 
+    await maybeRerollOnHoldRefill(userId, count, count + 1);
+
     res.json({ ok: true, game: game.name });
   } catch (err) {
     next(err);
@@ -209,6 +216,9 @@ router.post('/complete', requirePlayerSecret, async (req, res, next) => {
       status: 'lobby'
     });
     if (!game) return res.status(404).json({ error: 'That game is not in the lobby for this player. Add it to the lobby first.' });
+
+    const bonus = await currentBonusGame(userId);
+    game.bonusOnComplete = !!(bonus && String(bonus._id) === String(game._id));
 
     game.status = 'finished';
     game.dateCompleted = new Date();
@@ -550,9 +560,10 @@ router.post('/reset', async (req, res, next) => {
     await Game.updateMany(
       {},
       {
-        $set: { status: 'available', ownerId: null, forcedByUserId: null, claimMethod: null, released: false, dateAssigned: null, dateCompleted: null }
+        $set: { status: 'available', ownerId: null, forcedByUserId: null, claimMethod: null, released: false, dateAssigned: null, dateCompleted: null, bonusOnComplete: false }
       }
     );
+    await User.updateMany({}, { $set: { bonusGameId: null } });
     await Trade.deleteMany({});
     res.json({ ok: true });
   } catch (err) {

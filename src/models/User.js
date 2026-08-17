@@ -16,7 +16,15 @@ const userSchema = new mongoose.Schema(
     avatar: {
       data: { type: Buffer, select: false, default: null },
       contentType: { type: String, default: null }
-    }
+    },
+    // The single held game currently flagged as bonus-value for this player,
+    // if any — a *pointer*, re-picked by the weighted lottery in
+    // src/lib/bonusGame.js. Not a derived economic value like coins, so
+    // storing it doesn't break the "coins/streak always derived" rule above.
+    // May point to a game that's since left this user's held statuses
+    // (finished/traded/forced away) — every read site treats that as
+    // "unflagged" rather than clearing it eagerly; see currentBonusGame().
+    bonusGameId: { type: mongoose.Schema.Types.ObjectId, ref: 'Game', default: null }
   },
   { timestamps: true }
 );

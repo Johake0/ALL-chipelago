@@ -37,9 +37,10 @@ export default function Lobby({ lobby, me, onComplete, onReturn, busy }) {
       {lobby.map((item) => {
         const mine = item.ownerId === me.id
         const confirming = confirmingId === item.id
+        const isBonus = mine && item.id === me.bonusGameId
         return (
-          <div className="hold-row lobby-row" key={item.id}>
-            <span>🎮 {item.game} <span className="lobby-owner">— {mine ? 'you' : item.ownerName}</span></span>
+          <div className={`hold-row lobby-row${isBonus ? ' bonus-row' : ''}`} key={item.id}>
+            <span>🎮 {item.game}{isBonus && <span className="bonus-tag" title="Bonus game — pays 1.5x if finished">⭐</span>} <span className="lobby-owner">— {mine ? 'you' : item.ownerName}</span></span>
             {mine && (
               <div className="lobby-actions">
                 <button
