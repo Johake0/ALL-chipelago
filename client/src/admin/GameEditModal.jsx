@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { adminFetch } from '../api.js'
 
-const STATUSES = ['available', 'personal_list', 'in_inventory', 'forced', 'lobby', 'finished']
+const STATUSES = ['available', 'personal_list', 'in_inventory', 'forced', 'lobby', 'auctioning', 'finished']
 
 function toDateInputValue(iso) {
   if (!iso) return ''

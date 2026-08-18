@@ -152,7 +152,8 @@ router.post('/games', requireAdmin, async (req, res, next) => {
 const OVERRIDABLE_FIELDS = [
   'name', 'coinValue', 'forceReleaseCost', 'scalingTags', 'removed',
   'status', 'ownerId', 'forcedByUserId', 'interestFor', 'claimMethod',
-  'released', 'dateAssigned', 'dateCompleted'
+  'released', 'dateAssigned', 'dateCompleted', 'sessionId', 'sessionPending',
+  'auctionWon', 'bonusOnComplete'
 ];
 
 router.patch('/games/:id', requireAdmin, async (req, res, next) => {

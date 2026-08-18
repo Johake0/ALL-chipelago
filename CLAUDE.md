@@ -147,8 +147,9 @@ is about how the code implements it.
   finish/release flow a normal Lobby entry does. `useGameState.js` polls
   every ~3s (instead of the usual 15s) while `session.auction.status ===
   'open'`, chosen over WebSockets/SSE to avoid new infrastructure — see
-  "Known gap" below for the one piece of the original design this
-  implementation doesn't enforce.
+  "Resolved: does an Auction win let the winner 'double dip' on spins?"
+  below for the one piece of the original design this implementation
+  doesn't literally enforce (turned out not to need enforcing).
 - **Activity Feed** (`GET /api/activity`) and **Leaderboard**: neither is
   a stored log/table — Activity is assembled on read by merging
   `Game.dateAssigned`/`dateCompleted` and the `Trade` collection (each
@@ -179,10 +180,12 @@ Player-facing (needs `x-player-secret`): `GET /api/state`, `GET /api/activity`,
 `/api/session/finalize-bid` (the last three live in `src/routes/session.js`,
 not `gameLoop.js` — see the Session & Auction bullet below).
 Admin-only (needs `x-admin-secret`): `POST /api/reset`, full CRUD on
-`/api/users` and `/api/games` (including avatar upload/delete). Note the
-admin games editor's `OVERRIDABLE_FIELDS` doesn't include `bonusOnComplete`
-or expose `User.bonusGameId` — there's no manual-override path for the
-Bonus Game flag yet.
+`/api/users` and `/api/games` (including avatar upload/delete). The admin
+games editor's `OVERRIDABLE_FIELDS` covers `bonusOnComplete`,
+`sessionId`/`sessionPending`/`auctionWon`, and its status dropdown includes
+`'auctioning'` — `User.bonusGameId` is the one remaining manual-override
+gap, since the admin users editor only lets you rename someone, not touch
+arbitrary fields.
 `GET /api/users/:id/avatar` is the one deliberately public route.
 
 ## Known gotchas
@@ -233,10 +236,10 @@ Bonus Game flag yet.
 - Real auth (the admin/player secrets are speed bumps, not auth)
 - Cascading cleanup when an admin deletes a user (their games stay owned
   by a now-missing `ownerId` rather than being reassigned or freed)
-- Manual admin override for `User.bonusGameId` / `Game.bonusOnComplete`
-  (see API surface note above), or for anything on `Session`/the new
-  `Game` session fields — the admin games editor's `OVERRIDABLE_FIELDS`
-  doesn't include `sessionId`/`sessionPending`/`auctionWon`.
+- Manual admin override for `User.bonusGameId` (see API surface note
+  above) — there's no manual-override path for anything on `User` besides
+  the username. The `Game`-side session/bonus fields *are* now overridable
+  as of this file's last update.
 
 ## Resolved: does an Auction win let the winner "double dip" on spins?
 The original settled design said "the winner skips their own wheel spin
