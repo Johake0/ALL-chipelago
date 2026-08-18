@@ -19,6 +19,14 @@ is about how the code implements it.
   live Render API (`https://ar-chipelago.onrender.com`).
 - Root `package.json` is the API's; `client/package.json` is the frontend's
   — two separate `npm install`s, two separate dependency trees.
+- **Project display name changed to "ALL-Chipelago"** (README title, and
+  `client/vite.config.js`'s `base: '/ALL-chipelago/'` for GitHub Pages
+  routing) — but this was a cosmetic/hosting-path rename only, not a full
+  technical one: the local folder, git remote (`origin` still points at
+  `.../AR-chipelago.git`, working via GitHub's rename redirect), and both
+  `package.json` `name` fields are all still `AR-chipelago`/
+  `archipelago-randomizer-api`. Don't assume the name is consistent
+  everywhere — check which one a given context actually needs.
 
 ## Current architecture decisions
 - **Backend/DB stack:** Node.js + Express + Mongoose + MongoDB Atlas (free
@@ -74,6 +82,40 @@ is about how the code implements it.
   5th consecutive completion adds a flat milestone bonus of
   `200 + 20 × (milestone# − 1)`. Calibrated against the real catalog's
   average coinValue (~206) so a milestone reads as "one free extra game."
+- **`computeUserStats` returns both `coins` (spendable balance) and
+  `totalEarned` (lifetime earnings, only ever grows)** — added when Gifting
+  and the Leaderboard needed to distinguish them. `coins` is
+  `totalEarned - spent (force/release/reroll/gifts sent) + gifts received`;
+  `totalEarned` never reflects spending or gifting in either direction, so
+  it can't be inflated by hoarding or laundering coins between friends —
+  that's what the Leaderboard's "Coins Earned" column ranks by.
+- **Bonus Game** (`src/lib/bonusGame.js`): one held game per player is
+  flagged `User.bonusGameId` via a weighted lottery
+  (`min(1 + 0.5 × gamesCompletedSinceAdded, 4)` per candidate, where
+  `gamesCompletedSinceAdded` counts that player's other `finished` games
+  with `dateCompleted` after the candidate's `dateAssigned` — ordering
+  against existing data, not a new stored field or wall-clock time).
+  Finishing the flagged game pays `× 1.5` on top of the normal streak
+  multiplier — recorded permanently on that `Game` doc as
+  `bonusOnComplete` at the moment `/api/complete` runs (not re-checked
+  later), since the flag itself can move to a different game before
+  payout would otherwise be read. Reroll trigger (a) — hold count
+  refilling to 9/10 — is wired via `maybeRerollOnHoldRefill`, called from
+  `/api/spin` and `/api/claim-interest`. Trigger (b) (an Auction session
+  ending with the player having taken the auctioned game) isn't wired yet
+  since the Auction doesn't exist — see "Planned" below.
+- **Gift Coins** (`POST /api/gift`): a pure coin transfer between two
+  players, no game involved — logged as a `Trade` (`type: 'gift'`) the
+  same way force/release/reroll costs are, so `computeUserStats` just
+  subtracts it from the sender and adds it to the recipient with no
+  separate balance to keep in sync.
+- **Activity Feed** (`GET /api/activity`) and **Leaderboard**: neither is
+  a stored log/table — Activity is assembled on read by merging
+  `Game.dateAssigned`/`dateCompleted` and the `Trade` collection (each
+  source capped at 50 before merging, then re-sorted and re-capped), and
+  the Leaderboard is computed client-side from the same per-player stats
+  `GET /api/state` already returns. Same "derive, don't store" principle
+  as coins/streak.
 - **Google Sheet status:** kept as a frozen backup, not live-synced. The
   migration (`scripts/importFromSheet.js`) is a one-time import, not a
   recurring sync.
@@ -90,11 +132,15 @@ is about how the code implements it.
   param.
 
 ## API surface (mirrors the old Apps Script action verbs, plus new ones)
-Player-facing (needs `x-player-secret`): `GET /api/state`, `POST /api/spin`,
-`/api/complete`, `/api/claim-interest`, `/api/trade`, `/api/force`,
-`/api/release`, `/api/reroll`, `/api/lobby/add`, `/api/lobby/return`.
+Player-facing (needs `x-player-secret`): `GET /api/state`, `GET /api/activity`,
+`POST /api/spin`, `/api/complete`, `/api/claim-interest`, `/api/trade`,
+`/api/force`, `/api/release`, `/api/reroll`, `/api/gift`, `/api/lobby/add`,
+`/api/lobby/return`.
 Admin-only (needs `x-admin-secret`): `POST /api/reset`, full CRUD on
-`/api/users` and `/api/games` (including avatar upload/delete).
+`/api/users` and `/api/games` (including avatar upload/delete). Note the
+admin games editor's `OVERRIDABLE_FIELDS` doesn't include `bonusOnComplete`
+or expose `User.bonusGameId` — there's no manual-override path for the
+Bonus Game flag yet.
 `GET /api/users/:id/avatar` is the one deliberately public route.
 
 ## Known gotchas
@@ -112,55 +158,39 @@ Admin-only (needs `x-admin-secret`): `POST /api/reset`, full CRUD on
 - Because coins/streak are recomputed from the full log on every read, any
   future change to the payout curve in `stats.js` applies retroactively to
   existing history too, not just future completions.
+- The client's dev-server base path (`client/vite.config.js`) is
+  `/ALL-chipelago/`, not `/AR-chipelago/` — a local `npm run dev` serves
+  at `http://localhost:5173/ALL-chipelago/`, not the old path. Easy to
+  get a stale URL from habit or old notes since the local folder and both
+  `package.json`s kept the old name (see the rename note above).
 
 ## Not built yet
 - Real auth (the admin/player secrets are speed bumps, not auth)
 - Cascading cleanup when an admin deletes a user (their games stay owned
   by a now-missing `ownerId` rather than being reassigned or freed)
+- The Auction/Session system — see "Planned" below. This is the next
+  build per that section's own stated order (Bonus Game, now done, was
+  meant to come first specifically to avoid retrofitting the Auction
+  around it).
+- Manual admin override for `User.bonusGameId` / `Game.bonusOnComplete`
+  (see API surface note above).
 
-## Planned: Bonus Game + Lobby Sessions & Auction (design settled, not built)
+## Planned: Lobby Sessions & Auction (design settled, not built)
 
-Two coupled features, both fully designed from discussion, deliberately
-shelved behind the Leaderboard/Activity Feed/Gifting work (now built).
-**Build order: Bonus Game first, then the Auction.** The Bonus Game is
-small and self-contained — no new Session/Lobby infrastructure needed.
-The Auction is the much bigger lift (a real Session entity, atomic
-ready-up locking, a multi-round bidding state machine), and the Bonus
-Game's reroll timing already assumes the Auction exists once *it's*
-built — so building the Bonus Game first means adding one more reroll
-trigger to it later, rather than having to retrofit the whole mechanic
-around the Auction from day one.
-
-**Bonus Game (a small nudge, not a real economic lever):**
-- One game in a player's hold is flagged as bonus-value at a time.
-  Finishing it pays `coinValue × streakMultiplier × 1.5` — the 1.5x
-  stacks on top of the existing streak multiplier, it doesn't replace it.
-- Purpose is explicitly *not* to fix the coin-inflation problem the
-  simulation above found — it's to nudge players toward actually playing
-  through their hold instead of sitting on it. Confirmed via the same
-  simulation: even under generous assumptions (catching it roughly every
-  other completion), this only adds ~15-20% on top of the already-large
-  streak-driven balances at 50-70% catalog completion; realistic capture
-  rates add closer to 3-8%. It's flavor, not rebalancing — don't expect
-  it to matter for the inflation picture.
-- Which held game gets flagged is a **weighted random lottery**, not
-  deterministic and not based on wall-clock time. Each held game's weight
-  is `min(1 + 0.5 × gamesCompletedSinceAdded, 4)`, where
-  `gamesCompletedSinceAdded` = how many of this player's `finished` games
-  have a `dateCompleted` after that held game's `dateAssigned` — a pure
-  ordering comparison against data that already exists, not a new stored
-  field. Deliberately *not* based on elapsed real time: a multi-day group
-  break would otherwise inflate every held game's "staleness" equally,
-  rewarding nothing about actual play behavior.
-- The weight cap (4) is deliberate and mirrors the existing streak
-  multiplier's own cap (1.5x) — without it, a sufficiently-neglected game
-  could climb close enough to 100% selection odds to become a de facto
-  guarantee, which defeats the "nudge but never guaranteed" goal.
-- Reroll (re-pick which held game is flagged) triggers on: (a) hold count
-  refilling back up to 9/10 after being drawn down, or (b) a Lobby
-  session ending where the player took the auctioned game instead of
-  their original pick — see the Auction section below for why (b) exists
-  and what tension it creates.
+The Bonus Game half of this was originally planned alongside the Auction
+(see the git history for that original combined write-up) but is now
+**done** — see the "Bonus Game" bullet under "Current architecture
+decisions" above for how it actually works. Only the Session/Auction half
+below remains unbuilt. It was always going to be the bigger lift (a real
+Session entity, atomic ready-up locking, a multi-round bidding state
+machine) — the Bonus Game was deliberately built first so its reroll
+trigger (b) below could be added to already-working code instead of
+having to retrofit the whole mechanic around the Auction from day one.
+Trigger (b) is the one loose end this leaves: `maybeRerollOnHoldRefill`
+only wires up trigger (a) (hold refilling to 9/10) today; trigger (b)
+(session-end-with-auction-win) has nowhere to call from yet since nothing
+calls `pickBonusGame` on session close — that wiring is part of this
+Auction build, not a followup after it.
 
 **Why:** the Lobby today is just "whoever currently has a game with
 `status: 'lobby'`" — an ad-hoc bucket, not a real group entity. Both this
@@ -264,9 +294,16 @@ tradeoff, not an oversight to fix later.
   even though the auction itself no longer pays extra.
 
 **Session close:**
-- "Done" can only ever mean *finished*, never *released* — releasing
-  from an active Lobby session was already made impossible on purpose
-  (see the Lobby note above), so this doesn't need new handling.
+- Earlier drafts of this note assumed "Done" could only mean *finished*,
+  never *released*, on the premise that releasing from an active Lobby
+  session was impossible. That premise no longer holds — see the Lobby
+  bullet under "Current architecture decisions" above: Release from
+  `'lobby'` status is now allowed, deliberately, even once Sessions
+  exist. So session-close logic **does** need to handle a member
+  releasing instead of finishing — treat it the same as if they'd never
+  confirmed done, or drop them from the pending-coins exclusion; decide
+  the exact mechanics when building this, but don't assume it can't
+  happen.
 - All session members must individually confirm they're done before (a)
   anyone's coins from that session's completions become collectable, and
   (b) a new session can start. Matches how the group already plays —

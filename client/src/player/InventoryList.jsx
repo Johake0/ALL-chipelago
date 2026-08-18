@@ -4,7 +4,7 @@ export default function InventoryList({ player, onAddToLobby, hasLobbyEntry, bus
   const isBonus = (id) => id === player.bonusGameId
 
   return (
-    <section className="panel">
+    <section className="panel hold-panel">
       <h2 className="hold-heading">Your Hold</h2>
       {empty && <p className="empty">Nothing yet — spin the wheel!</p>}
       {player.forceSlot && (

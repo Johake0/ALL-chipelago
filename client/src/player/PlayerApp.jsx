@@ -156,11 +156,14 @@ function PlayerHome() {
 
               {status && <p className="status-msg">{status}</p>}
 
+              <div className="panel-grid">
+                <Lobby lobby={state.lobby} me={me} onComplete={handleComplete} onReturn={handleReturnFromLobby} onRelease={handleRelease} busy={busy} />
+                <InventoryList player={me} onAddToLobby={handleAddToLobby} hasLobbyEntry={!!myLobbyEntry} busy={busy} />
+              </div>
+
               <StatsBar player={me} inventorySize={state.inventorySize} />
 
               <div className="panel-grid">
-                <InventoryList player={me} onAddToLobby={handleAddToLobby} hasLobbyEntry={!!myLobbyEntry} busy={busy} />
-                <Lobby lobby={state.lobby} me={me} onComplete={handleComplete} onReturn={handleReturnFromLobby} onRelease={handleRelease} busy={busy} />
                 <Bazaar
                   me={me}
                   players={state.players}

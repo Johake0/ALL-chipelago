@@ -364,7 +364,8 @@
 .panel-grid > .bazaar-panel,
 .panel-grid > .lobby-panel,
 .panel-grid > .trophy-panel,
-.panel-grid > .leaderboard-panel {
+.panel-grid > .leaderboard-panel,
+.panel-grid > .hold-panel {
   flex-basis: 100%;
   max-width: none;
 }
