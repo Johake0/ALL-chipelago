@@ -33,3 +33,12 @@ export const getActivity = () => publicFetch('/api/activity')
 
 export const gift = (userId, targetUserId, amount) =>
   publicFetch('/api/gift', { method: 'POST', body: JSON.stringify({ userId, targetUserId, amount }) })
+
+export const setReady = (userId, ready) =>
+  publicFetch('/api/session/ready', { method: 'POST', body: JSON.stringify({ userId, ready }) })
+
+export const placeBid = (userId, action, amount) =>
+  publicFetch('/api/session/bid', { method: 'POST', body: JSON.stringify({ userId, action, amount }) })
+
+export const finalizeBid = (userId) =>
+  publicFetch('/api/session/finalize-bid', { method: 'POST', body: JSON.stringify({ userId }) })

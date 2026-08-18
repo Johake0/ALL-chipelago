@@ -47,7 +47,7 @@ export default function Lobby({ lobby, me, onComplete, onReturn, onRelease, busy
         const isBonus = mine && item.id === me.bonusGameId
         return (
           <div className={`hold-row lobby-row${isBonus ? ' bonus-row' : ''}`} key={item.id}>
-            <span>🎮 {item.game}{isBonus && <span className="bonus-tag" title="Bonus game — pays 1.5x if finished">⭐</span>} <span className="lobby-owner">— {mine ? 'you' : item.ownerName}</span></span>
+            <span>🎮 {item.game}{isBonus && <span className="bonus-tag" title="Bonus game — pays 1.5x if finished">⭐</span>}{item.auctionWon && <span className="auction-tag" title="Won in this session's Auction">🔨</span>} <span className="lobby-owner">— {mine ? 'you' : item.ownerName}</span></span>
             {mine && (
               <div className="lobby-actions">
                 <button

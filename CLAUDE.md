@@ -102,13 +102,53 @@ is about how the code implements it.
   payout would otherwise be read. Reroll trigger (a) — hold count
   refilling to 9/10 — is wired via `maybeRerollOnHoldRefill`, called from
   `/api/spin` and `/api/claim-interest`. Trigger (b) (an Auction session
-  ending with the player having taken the auctioned game) isn't wired yet
-  since the Auction doesn't exist — see "Planned" below.
+  ending with the player having taken the auctioned game) is now wired
+  too, from `closeSessionIfDone` — see the Session & Auction bullet below.
 - **Gift Coins** (`POST /api/gift`): a pure coin transfer between two
   players, no game involved — logged as a `Trade` (`type: 'gift'`) the
   same way force/release/reroll costs are, so `computeUserStats` just
   subtracts it from the sender and adds it to the recipient with no
   separate balance to keep in sync.
+- **Session & Auction** (`src/models/Session.js`, `src/routes/session.js`,
+  `src/lib/sessionAuction.js`): the Lobby is now backed by a real `Session`
+  document instead of being purely an ad-hoc `status: 'lobby'` bucket. A
+  session is created lazily (`status: 'pending'`) the moment the first
+  player adds a game to the Lobby (`POST /api/lobby/add`); while pending,
+  `POST /api/session/ready` toggles readiness, and — inside one
+  transaction that marks-ready, checks "is everyone now ready," and locks
+  in, all atomically, same rationale `/api/trade`'s transaction already
+  documents — locks in once every current lobby member is ready and there
+  are 2+. Lock-in snapshots `memberUserIds`, tags every member's Lobby game
+  with `sessionId`, and spins the wheel among `available` games to open the
+  mandatory Auction: the picked game flips to a new `'auctioning'` status
+  (kept out of `'available'` automatically, no extra filtering needed
+  anywhere) while `POST /api/session/bid` runs the ramp-then-open bidding
+  state machine (`meet`/`dropout` while `stepPercent` is 10→100, then
+  `raise`/`dropout` once it's `null`), and `POST /api/session/finalize-bid`
+  resolves it once exactly one bidder remains. **Deliberately no
+  affordability check on bids** — unlike every other spend route in this
+  codebase, the settled design says bid size is uncapped and overspending
+  is the bidder's own problem. The 5-minute no-bid timeout has no
+  cron/queue backing it (none exists in this app); it's a lazy check
+  (`resolveStaleAuction`) run at the top of `GET /api/state`.
+  Session-closing is hooked into the *existing* `/api/complete` and
+  `/api/release` routes rather than a new endpoint: finishing/releasing a
+  session game checks whether any other member of that session still has
+  a `status: 'lobby'` game, and if not, closes the session, clears
+  `sessionPending` on all its games (which is what makes their coins
+  collectable — see `computeUserStats`'s gating), and fires the Bonus
+  Game reroll trigger (b) for any member whose slot was an auction win.
+  The auction winner's slot deliberately **reuses `status: 'lobby'`** with
+  a new `auctionWon: true` flag, rather than inventing a whole new status
+  value — the original design note's warning was specifically about not
+  reusing `'forced'` (which really would corrupt
+  `inventoryCountForUser`/hold-cap logic); `'lobby'` doesn't have that
+  hazard since the auction win needs to go through the exact same
+  finish/release flow a normal Lobby entry does. `useGameState.js` polls
+  every ~3s (instead of the usual 15s) while `session.auction.status ===
+  'open'`, chosen over WebSockets/SSE to avoid new infrastructure — see
+  "Known gap" below for the one piece of the original design this
+  implementation doesn't enforce.
 - **Activity Feed** (`GET /api/activity`) and **Leaderboard**: neither is
   a stored log/table — Activity is assembled on read by merging
   `Game.dateAssigned`/`dateCompleted` and the `Trade` collection (each
@@ -135,7 +175,9 @@ is about how the code implements it.
 Player-facing (needs `x-player-secret`): `GET /api/state`, `GET /api/activity`,
 `POST /api/spin`, `/api/complete`, `/api/claim-interest`, `/api/trade`,
 `/api/force`, `/api/release`, `/api/reroll`, `/api/gift`, `/api/lobby/add`,
-`/api/lobby/return`.
+`/api/lobby/return`, `/api/session/ready`, `/api/session/bid`,
+`/api/session/finalize-bid` (the last three live in `src/routes/session.js`,
+not `gameLoop.js` — see the Session & Auction bullet below).
 Admin-only (needs `x-admin-secret`): `POST /api/reset`, full CRUD on
 `/api/users` and `/api/games` (including avatar upload/delete). Note the
 admin games editor's `OVERRIDABLE_FIELDS` doesn't include `bonusOnComplete`
@@ -163,34 +205,64 @@ Bonus Game flag yet.
   at `http://localhost:5173/ALL-chipelago/`, not the old path. Easy to
   get a stale URL from habit or old notes since the local folder and both
   `package.json`s kept the old name (see the rename note above).
+- **There is no separate dev/test database** — `npm run dev`'s local API
+  points at the same MongoDB Atlas cluster the deployed Render app uses,
+  via the one `MONGODB_URI` in `.env`. Any live end-to-end testing against
+  it (e.g. curling through a real Session/Auction flow) is testing against
+  real player data, not a sandbox.
+- **If you ever back up/restore that live data around a live test (dump
+  collections, run a destructive flow, restore), don't round-trip through
+  plain `JSON.stringify`/`JSON.parse`.** Doing exactly that once during
+  the Session/Auction build silently stripped every BSON type down to
+  something JSON-safe — `ObjectId` fields (`_id`, `ownerId`, every
+  `*UserId`/`*Id` reference) became plain strings, `Date` fields became
+  ISO strings, and the avatar `Buffer` became a plain `{type, data}`
+  object. The restore "succeeded" (right document counts) but every
+  reference lookup silently broke — all four players showed 0 coins/0
+  hold, since `Game.find({ownerId: someObjectId})` no longer matched a
+  stored string. Caught only because state was re-verified against known
+  values right after restoring, not assumed correct from a clean exit
+  code. If you need to do this again: either keep everything in one
+  script's memory (dump and restore in the same process, never through a
+  JSON file) so the real driver's `ObjectId`/`Date`/`Buffer` instances
+  never get serialized away, or reconstruct those types explicitly on the
+  way back in — and always re-verify actual values afterward (not just
+  document counts) before trusting a restore.
 
 ## Not built yet
 - Real auth (the admin/player secrets are speed bumps, not auth)
 - Cascading cleanup when an admin deletes a user (their games stay owned
   by a now-missing `ownerId` rather than being reassigned or freed)
-- The Auction/Session system — see "Planned" below. This is the next
-  build per that section's own stated order (Bonus Game, now done, was
-  meant to come first specifically to avoid retrofitting the Auction
-  around it).
 - Manual admin override for `User.bonusGameId` / `Game.bonusOnComplete`
-  (see API surface note above).
+  (see API surface note above), or for anything on `Session`/the new
+  `Game` session fields — the admin games editor's `OVERRIDABLE_FIELDS`
+  doesn't include `sessionId`/`sessionPending`/`auctionWon`.
 
-## Planned: Lobby Sessions & Auction (design settled, not built)
+## Resolved: does an Auction win let the winner "double dip" on spins?
+The original settled design said "the winner skips their own wheel spin
+next round — they play the auction win instead," which doesn't map onto
+this app's actual spin model (spins are player-driven and async, not tied
+to rounds — see git history on this file for the fuller original framing).
+Turned out no explicit guard is needed anyway: `inventoryCountForUser`
+counts `'lobby'` status, so winning an auction costs the winner exactly
+one hold slot, the same as a normal spin would — the winner's original
+game goes `'lobby'` → `'in_inventory'` (counted either way, no change),
+while the newly-won game enters as `'lobby'` (a fresh +1). So a winner can
+only spin again afterward if they genuinely had spare hold capacity —
+exactly the same condition that gates a spin anywhere else in the app, not
+a loophole specific to winning an auction.
 
-The Bonus Game half of this was originally planned alongside the Auction
-(see the git history for that original combined write-up) but is now
-**done** — see the "Bonus Game" bullet under "Current architecture
-decisions" above for how it actually works. Only the Session/Auction half
-below remains unbuilt. It was always going to be the bigger lift (a real
-Session entity, atomic ready-up locking, a multi-round bidding state
-machine) — the Bonus Game was deliberately built first so its reroll
-trigger (b) below could be added to already-working code instead of
-having to retrofit the whole mechanic around the Auction from day one.
-Trigger (b) is the one loose end this leaves: `maybeRerollOnHoldRefill`
-only wires up trigger (a) (hold refilling to 9/10) today; trigger (b)
-(session-end-with-auction-win) has nowhere to call from yet since nothing
-calls `pickBonusGame` on session close — that wiring is part of this
-Auction build, not a followup after it.
+## Session & Auction: original design rationale (now built)
+
+Both the Bonus Game and the Session/Auction system described below are
+now **built** — see "Bonus Game" and "Session & Auction" under "Current
+architecture decisions" above for how each actually works, and "Known
+gap" above for the one piece of this original note the implementation
+doesn't enforce. This section is kept because the *why* behind several
+non-obvious choices (most notably why the Auction pays no bonus) is still
+useful context that isn't self-evident from the code alone — treat
+specific mechanics below as historical intent, cross-checked against the
+"Current architecture decisions" bullet for what's actually implemented.
 
 **Why:** the Lobby today is just "whoever currently has a game with
 `status: 'lobby'`" — an ad-hoc bucket, not a real group entity. Both this
@@ -293,19 +365,23 @@ tradeoff, not an oversight to fix later.
   worth potentially losing my current bonus shot" is a real decision,
   even though the auction itself no longer pays extra.
 
-**Session close:**
+**Session close (as actually implemented — `closeSessionIfDone` in
+`src/lib/sessionAuction.js`):**
 - Earlier drafts of this note assumed "Done" could only mean *finished*,
   never *released*, on the premise that releasing from an active Lobby
-  session was impossible. That premise no longer holds — see the Lobby
-  bullet under "Current architecture decisions" above: Release from
-  `'lobby'` status is now allowed, deliberately, even once Sessions
-  exist. So session-close logic **does** need to handle a member
-  releasing instead of finishing — treat it the same as if they'd never
-  confirmed done, or drop them from the pending-coins exclusion; decide
-  the exact mechanics when building this, but don't assume it can't
-  happen.
-- All session members must individually confirm they're done before (a)
-  anyone's coins from that session's completions become collectable, and
-  (b) a new session can start. Matches how the group already plays —
-  nobody starts the next randomizer until everyone's finished the
-  current one.
+  session was impossible. That premise didn't hold by the time this was
+  built — see the Lobby bullet under "Current architecture decisions"
+  above: Release from `'lobby'` status is allowed even during an active
+  Session. So `closeSessionIfDone` treats finishing and releasing
+  identically for the purposes of "is anyone still playing": both take a
+  member's game out of `status: 'lobby'`, and that's the only thing
+  checked. A released session game earns nothing either way (same as a
+  released game anywhere else), so there's nothing to hold back for it
+  specifically — it just needs to stop counting as "still in progress."
+- All session members must individually finish or release their own
+  session game before (a) anyone's coins from that session's completions
+  become collectable (`sessionPending` gating in `computeUserStats`), and
+  (b) a new session can start (a locked-in session blocks new
+  `POST /api/lobby/add` calls from anyone until it closes). Matches how
+  the group already plays — nobody starts the next randomizer until
+  everyone's finished the current one.

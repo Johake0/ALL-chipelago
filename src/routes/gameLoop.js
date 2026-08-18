@@ -3,8 +3,10 @@ import mongoose from 'mongoose';
 import Game from '../models/Game.js';
 import User from '../models/User.js';
 import Trade from '../models/Trade.js';
+import Session from '../models/Session.js';
 import { computeUserStats, inventoryCountForUser, freeClaimsUsedForUser, rerollsUsedForUser, rerollCost, timesForcedForUser, LIMITS } from '../lib/stats.js';
 import { maybeRerollOnHoldRefill, currentBonusGame } from '../lib/bonusGame.js';
+import { resolveStaleAuction, closeSessionIfDone } from '../lib/sessionAuction.js';
 
 const router = express.Router();
 
@@ -16,7 +18,7 @@ const router = express.Router();
 // are both mounted at '/api' in server.js — a blanket router-level
 // middleware here would intercept admin.js's requests too before they ever
 // got a chance to match there.
-function requirePlayerSecret(req, res, next) {
+export function requirePlayerSecret(req, res, next) {
   if (!process.env.PLAYER_SECRET || req.headers['x-player-secret'] !== process.env.PLAYER_SECRET) {
     return res.status(403).json({ error: 'Not authorized.' });
   }
@@ -46,6 +48,8 @@ router.get('/users/:id/avatar', async (req, res, next) => {
 // ---------------------------------------------------------------------
 router.get('/state', requirePlayerSecret, async (req, res, next) => {
   try {
+    await resolveStaleAuction();
+
     const [users, availableGames] = await Promise.all([
       User.find().lean(),
       Game.find({ status: 'available', removed: false }).lean()
@@ -114,13 +118,48 @@ router.get('/state', requirePlayerSecret, async (req, res, next) => {
       ownerId: g.ownerId?._id,
       ownerName: g.ownerId?.username,
       coinValue: g.coinValue,
-      forceReleaseCost: g.forceReleaseCost
+      forceReleaseCost: g.forceReleaseCost,
+      auctionWon: g.auctionWon
     }));
+
+    // Session/Auction — null when no session is pending/active. The client
+    // needs enough here to render ready-up state and a live auction
+    // without polling any new endpoint beyond this one (see
+    // useGameState.js's faster polling while auction.status === 'open').
+    const dbSession = await Session.findOne({ status: { $ne: 'closed' } }).lean();
+    let session = null;
+    if (dbSession) {
+      let auctionInfo = null;
+      if (dbSession.auction?.gameId) {
+        const auctionGame = await Game.findById(dbSession.auction.gameId).lean();
+        if (auctionGame) auctionInfo = { id: auctionGame._id, name: auctionGame.name, coinValue: auctionGame.coinValue };
+      }
+      session = {
+        id: dbSession._id,
+        status: dbSession.status,
+        memberUserIds: dbSession.memberUserIds,
+        readyUserIds: dbSession.readyUserIds,
+        auction: dbSession.auction
+          ? {
+              game: auctionInfo,
+              status: dbSession.auction.status,
+              openedAt: dbSession.auction.openedAt,
+              currentMinimum: dbSession.auction.currentMinimum,
+              stepPercent: dbSession.auction.stepPercent,
+              metUserIds: dbSession.auction.metUserIds,
+              droppedOutUserIds: dbSession.auction.droppedOutUserIds,
+              winnerUserId: dbSession.auction.winnerUserId,
+              winningPrice: dbSession.auction.winningPrice
+            }
+          : null
+      };
+    }
 
     res.json({
       games: availableGames.map((g) => ({ id: g._id, name: g.name })),
       players,
       lobby,
+      session,
       inventorySize: LIMITS.INVENTORY_SIZE,
       freeRerolls: LIMITS.FREE_REROLLS,
       updatedAt: new Date().toISOString()
@@ -206,27 +245,39 @@ router.post('/claim-interest', requirePlayerSecret, async (req, res, next) => {
 // game there first (POST /api/lobby/add) before it can be marked finished.
 // This is a deliberate two-step flow (not just a UI nicety) so a stray
 // click on a hold item can never finish the wrong game outright.
+// If this game belongs to an active Session, its payout is held back
+// (sessionPending) until every member of that session has wrapped up
+// theirs — see closeSessionIfDone in src/lib/sessionAuction.js and the
+// exclusion in computeUserStats.
 // ---------------------------------------------------------------------
 router.post('/complete', requirePlayerSecret, async (req, res, next) => {
+  const mongoSession = await mongoose.startSession();
   try {
     const { userId, gameId } = req.body;
-    const game = await Game.findOne({
-      _id: gameId,
-      ownerId: userId,
-      status: 'lobby'
+    let result;
+
+    await mongoSession.withTransaction(async () => {
+      const game = await Game.findOne({ _id: gameId, ownerId: userId, status: 'lobby' }).session(mongoSession);
+      if (!game) throw new Error('That game is not in the lobby for this player. Add it to the lobby first.');
+
+      const bonus = await currentBonusGame(userId);
+      game.bonusOnComplete = !!(bonus && String(bonus._id) === String(game._id));
+
+      game.status = 'finished';
+      game.dateCompleted = new Date();
+      if (game.sessionId) game.sessionPending = true;
+      await game.save({ session: mongoSession });
+
+      if (game.sessionId) await closeSessionIfDone(game.sessionId, mongoSession);
+
+      result = { ok: true, game: game.name };
     });
-    if (!game) return res.status(404).json({ error: 'That game is not in the lobby for this player. Add it to the lobby first.' });
 
-    const bonus = await currentBonusGame(userId);
-    game.bonusOnComplete = !!(bonus && String(bonus._id) === String(game._id));
-
-    game.status = 'finished';
-    game.dateCompleted = new Date();
-    await game.save();
-
-    res.json({ ok: true, game: game.name });
+    res.json(result);
   } catch (err) {
-    next(err);
+    res.status(400).json({ error: err.message });
+  } finally {
+    mongoSession.endSession();
   }
 });
 
@@ -236,6 +287,12 @@ router.post('/complete', requirePlayerSecret, async (req, res, next) => {
 // be marked finished or returned to the hold. Capped at one lobby entry
 // per player at a time — the lobby represents "the one game you're
 // actively playing with the group right now."
+// Also the point a pending Session starts existing at all: if none is
+// currently open, one is created here (status: 'pending') the moment the
+// first player adds a game. If a session further along than 'pending'
+// already exists (locked in via /api/session/ready), new members can't
+// join it — matches real Archipelago multiworld generation fixing its
+// player set at generation time.
 // ---------------------------------------------------------------------
 router.post('/lobby/add', requirePlayerSecret, async (req, res, next) => {
   try {
@@ -244,6 +301,14 @@ router.post('/lobby/add', requirePlayerSecret, async (req, res, next) => {
     const alreadyInLobby = await Game.findOne({ ownerId: userId, status: 'lobby' });
     if (alreadyInLobby) {
       return res.status(400).json({ error: `You already have "${alreadyInLobby.name}" in the lobby — finish or return it first.` });
+    }
+
+    let currentSession = await Session.findOne({ status: { $ne: 'closed' } });
+    if (currentSession && currentSession.status !== 'pending') {
+      return res.status(400).json({ error: 'A session is already in progress — wait for it to close before joining the Lobby.' });
+    }
+    if (!currentSession) {
+      currentSession = await Session.create({ status: 'pending' });
     }
 
     const game = await Game.findOne({
@@ -267,7 +332,11 @@ router.post('/lobby/add', requirePlayerSecret, async (req, res, next) => {
 // Pulls a game back out of the lobby into the hold, for "wrong game,
 // didn't mean to add that" recoveries. Restores 'forced' rather than
 // 'in_inventory' if forcedByUserId is set, since that field is never
-// cleared once a game has been forced onto someone.
+// cleared once a game has been forced onto someone. Only reachable before
+// a session locks in (once locked, this game's status is held at 'lobby'
+// by the session itself until finished/released) — also clears any stale
+// ready-up vote so the pending session's "who's ready" list doesn't show a
+// checkmark for someone who backed out without explicitly un-readying.
 // ---------------------------------------------------------------------
 router.post('/lobby/return', requirePlayerSecret, async (req, res, next) => {
   try {
@@ -277,6 +346,8 @@ router.post('/lobby/return', requirePlayerSecret, async (req, res, next) => {
 
     game.status = game.forcedByUserId ? 'forced' : 'in_inventory';
     await game.save();
+
+    await Session.updateOne({ status: 'pending', readyUserIds: userId }, { $pull: { readyUserIds: userId } });
 
     res.json({ ok: true, game: game.name });
   } catch (err) {
@@ -394,35 +465,52 @@ router.post('/force', requirePlayerSecret, async (req, res, next) => {
 // Bails on a held (forced-on-you, or currently-in-the-Lobby) game the same
 // way /complete does, but marked released: no coins earned, streak resets,
 // and it costs the same coins as forcing that copy would — deducted the
-// same way force is. Releasing from 'lobby' status is allowed as of this
-// change — see CLAUDE.md's Lobby note for why that's fine today (no real
-// multiplayer Session/lock-in exists yet) but worth revisiting once one does.
+// same way force is. Releasing from 'lobby' status is allowed, deliberately
+// — see CLAUDE.md's Lobby note — even for a game that's part of an active
+// Session; a released game earns nothing so there's no sessionPending to
+// set, but it still needs to release its slot for closeSessionIfDone's
+// "is anyone still playing" check.
 // ---------------------------------------------------------------------
 router.post('/release', requirePlayerSecret, async (req, res, next) => {
+  const mongoSession = await mongoose.startSession();
   try {
     const { userId, gameId } = req.body;
-    const game = await Game.findOne({
-      _id: gameId,
-      ownerId: userId,
-      status: { $in: ['in_inventory', 'forced', 'lobby'] }
+    let result;
+
+    await mongoSession.withTransaction(async () => {
+      const game = await Game.findOne({
+        _id: gameId,
+        ownerId: userId,
+        status: { $in: ['in_inventory', 'forced', 'lobby'] }
+      }).session(mongoSession);
+      if (!game) throw new Error('That game is not in progress for this player.');
+
+      const { coins } = await computeUserStats(userId);
+      if (coins < game.forceReleaseCost) {
+        throw new Error(`Releasing "${game.name}" costs ${game.forceReleaseCost} coins — you only have ${coins}.`);
+      }
+
+      const sessionId = game.sessionId;
+      game.status = 'finished';
+      game.released = true;
+      game.dateCompleted = new Date();
+      await game.save({ session: mongoSession });
+
+      await Trade.create(
+        [{ type: 'release', fromUserId: userId, toUserId: userId, gameIdFrom: game._id, coinCost: game.forceReleaseCost }],
+        { session: mongoSession }
+      );
+
+      if (sessionId) await closeSessionIfDone(sessionId, mongoSession);
+
+      result = { ok: true, game: game.name };
     });
-    if (!game) return res.status(404).json({ error: 'That game is not in progress for this player.' });
 
-    const { coins } = await computeUserStats(userId);
-    if (coins < game.forceReleaseCost) {
-      return res.status(400).json({ error: `Releasing "${game.name}" costs ${game.forceReleaseCost} coins — you only have ${coins}.` });
-    }
-
-    game.status = 'finished';
-    game.released = true;
-    game.dateCompleted = new Date();
-    await game.save();
-
-    await Trade.create({ type: 'release', fromUserId: userId, toUserId: userId, gameIdFrom: game._id, coinCost: game.forceReleaseCost });
-
-    res.json({ ok: true, game: game.name });
+    res.json(result);
   } catch (err) {
-    next(err);
+    res.status(400).json({ error: err.message });
+  } finally {
+    mongoSession.endSession();
   }
 });
 
@@ -563,11 +651,16 @@ router.post('/reset', async (req, res, next) => {
     await Game.updateMany(
       {},
       {
-        $set: { status: 'available', ownerId: null, forcedByUserId: null, claimMethod: null, released: false, dateAssigned: null, dateCompleted: null, bonusOnComplete: false }
+        $set: {
+          status: 'available', ownerId: null, forcedByUserId: null, claimMethod: null, released: false,
+          dateAssigned: null, dateCompleted: null, bonusOnComplete: false,
+          sessionId: null, sessionPending: false, auctionWon: false
+        }
       }
     );
     await User.updateMany({}, { $set: { bonusGameId: null } });
     await Trade.deleteMany({});
+    await Session.deleteMany({});
     res.json({ ok: true });
   } catch (err) {
     next(err);

@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import { useGameState } from './useGameState.js'
-import { spin, completeGame, claimInterest, trade, force, release, reroll, addToLobby, returnFromLobby, gift } from './playerApi.js'
+import { spin, completeGame, claimInterest, trade, force, release, reroll, addToLobby, returnFromLobby, gift, setReady, placeBid, finalizeBid } from './playerApi.js'
 import Wheel from './Wheel.jsx'
 import StatsBar from './StatsBar.jsx'
 import InventoryList from './InventoryList.jsx'
 import InterestPicks from './InterestPicks.jsx'
 import TrophyCase from './TrophyCase.jsx'
 import Lobby from './Lobby.jsx'
+import Session from './Session.jsx'
 import Bazaar from './Bazaar.jsx'
 import Leaderboard from './Leaderboard.jsx'
 import Activity from './Activity.jsx'
@@ -111,6 +112,9 @@ function PlayerHome() {
     runAction(() => gift(me.id, targetUserId, amount), `Sent ${amount} coins!`)
   const handleAddToLobby = (gameId) => runAction(() => addToLobby(me.id, gameId), `${me.name} added a game to the Lobby!`)
   const handleReturnFromLobby = (gameId) => runAction(() => returnFromLobby(me.id, gameId), 'Game returned to your hold.')
+  const handleReady = (userId, ready) => runAction(() => setReady(userId, ready), ready ? 'Readied up!' : 'Unreadied.')
+  const handleBid = (action, amount) => runAction(() => placeBid(me.id, action, amount), action === 'dropout' ? 'Dropped out of the auction.' : 'Bid placed!')
+  const handleFinalizeBid = () => runAction(() => finalizeBid(me.id), 'Auction won!')
 
   if (error) return <p className="load-error">Couldn't reach the server: {error}</p>
   if (!state) return <p className="loading">Loading…</p>
@@ -157,6 +161,16 @@ function PlayerHome() {
               {status && <p className="status-msg">{status}</p>}
 
               <div className="panel-grid">
+                <Session
+                  session={state.session}
+                  lobby={state.lobby}
+                  me={me}
+                  players={state.players}
+                  onReady={handleReady}
+                  onBid={handleBid}
+                  onFinalize={handleFinalizeBid}
+                  busy={busy}
+                />
                 <Lobby lobby={state.lobby} me={me} onComplete={handleComplete} onReturn={handleReturnFromLobby} onRelease={handleRelease} busy={busy} />
                 <InventoryList player={me} onAddToLobby={handleAddToLobby} hasLobbyEntry={!!myLobbyEntry} busy={busy} />
               </div>

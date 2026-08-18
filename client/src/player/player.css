@@ -365,9 +365,38 @@
 .panel-grid > .lobby-panel,
 .panel-grid > .trophy-panel,
 .panel-grid > .leaderboard-panel,
-.panel-grid > .hold-panel {
+.panel-grid > .hold-panel,
+.panel-grid > .session-panel {
   flex-basis: 100%;
   max-width: none;
+}
+
+/* --- Session / Auction --- */
+.session-row {
+  flex-wrap: wrap;
+}
+
+.auction-tag {
+  margin-left: 4px;
+  font-size: 12px;
+}
+
+.auction-summary p {
+  margin: 0 0 6px;
+}
+
+.auction-summary p:last-child {
+  margin-bottom: 12px;
+}
+
+.session-row-list {
+  margin-bottom: 12px;
+}
+
+.bid-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 /* --- Lobby --- */

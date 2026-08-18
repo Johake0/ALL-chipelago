@@ -7,6 +7,7 @@ import cors from 'cors';
 import { connectDB } from './db.js';
 import gameLoopRoutes from './routes/gameLoop.js';
 import adminRoutes from './routes/admin.js';
+import sessionRoutes from './routes/session.js';
 
 const app = express();
 app.use(express.json());
@@ -20,6 +21,7 @@ app.use(
 
 app.use('/api', gameLoopRoutes);
 app.use('/api', adminRoutes);
+app.use('/api', sessionRoutes);
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 

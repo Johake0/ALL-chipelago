@@ -26,7 +26,11 @@ const gameSchema = new mongoose.Schema(
       // player moves a game here from in_inventory/forced instead of
       // completing it directly, and /api/complete only accepts games in
       // this status — see gameLoop.js's /api/lobby/* routes.
-      enum: ['available', 'personal_list', 'in_inventory', 'forced', 'lobby', 'finished'],
+      // 'auctioning' is a Session's wheel-picked auction item while
+      // bidding is open — kept out of 'available' so it can't also be
+      // spun/claimed by someone else mid-auction, with no extra filtering
+      // needed anywhere that already queries by status. See session.js.
+      enum: ['available', 'personal_list', 'in_inventory', 'forced', 'lobby', 'auctioning', 'finished'],
       default: 'available',
       index: true
     },
@@ -51,7 +55,26 @@ const gameSchema = new mongoose.Schema(
     // would otherwise be computed. computeUserStats needs this immutable
     // per-game record, not a live re-check of the (now possibly different)
     // current flag.
-    bonusOnComplete: { type: Boolean, default: false }
+    bonusOnComplete: { type: Boolean, default: false },
+
+    // Set on a Session member's game (original pick or an auction win) the
+    // moment it occupies that session's Lobby slot — lets session.js and
+    // gameLoop.js find "is anyone in this session still playing" without a
+    // separate membership-to-game join table.
+    sessionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Session', default: null },
+    // True alongside status: 'finished' iff sessionId was set at the moment
+    // of completion — computeUserStats excludes such games from
+    // coins/totalEarned until this flips back to false, which happens for
+    // every game in a session all at once when its last member
+    // finishes/releases (see gameLoop.js). Coins are still never *stored*;
+    // this only gates which finished games computeUserStats' read-time scan
+    // currently counts.
+    sessionPending: { type: Boolean, default: false },
+    // True iff this game reached the owner's Lobby slot by winning a
+    // session's Auction rather than the normal spin/interest/hold flow.
+    // Drives the Bonus Game reroll trigger (b) at session close and a
+    // distinct 🔨 tag in the Lobby UI.
+    auctionWon: { type: Boolean, default: false }
   },
   { timestamps: true }
 );

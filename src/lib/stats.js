@@ -39,9 +39,9 @@ const MILESTONE_STEP = 20;
 export async function computeUserStats(userId) {
   const [history, coinCosts, giftsReceived] = await Promise.all([
     Game.find({ ownerId: userId, status: 'finished' }).sort({ dateCompleted: 1 }).lean(),
-    // Gifts sent are subtracted the same way force/release/reroll costs
-    // are — fromUserId paid coinCost to make this happen either way.
-    Trade.find({ type: { $in: ['force', 'release', 'reroll', 'gift'] }, fromUserId: userId }).lean(),
+    // Gifts sent are subtracted the same way force/release/reroll/auction
+    // costs are — fromUserId paid coinCost to make this happen either way.
+    Trade.find({ type: { $in: ['force', 'release', 'reroll', 'gift', 'auction'] }, fromUserId: userId }).lean(),
     Trade.find({ type: 'gift', toUserId: userId }).lean()
   ]);
 
@@ -52,6 +52,14 @@ export async function computeUserStats(userId) {
   for (const game of history) {
     if (game.released) {
       streak = 0;
+    } else if (game.sessionPending) {
+      // Finished as part of a Session that hasn't fully closed yet (not
+      // every member has finished/released their own game) — its payout
+      // and streak contribution are held back entirely until then. Nothing
+      // is stored here either way: once closeSessionIfDone clears
+      // sessionPending (src/lib/sessionAuction.js), this same game is
+      // picked up on the very next read, in its correct chronological spot,
+      // same as any other change to this loop applying retroactively.
     } else {
       streak += 1;
       if (streak > longestStreak) longestStreak = streak;
