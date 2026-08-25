@@ -6,10 +6,10 @@ export default function InventoryList({ player, onAddToLobby, hasLobbyEntry, bus
   return (
     <section className="panel hold-panel">
       <h2 className="hold-heading">Your Hold</h2>
-      {empty && <p className="empty">Nothing yet — spin the wheel!</p>}
+      {empty && <p className="empty">Nothing yet. Spin the wheel!</p>}
       {player.forceSlot && (
         <div className={`hold-row forced${isBonus(player.forceSlot.id) ? ' bonus-row' : ''}`}>
-          <span>⚔️ {player.forceSlot.game}{isBonus(player.forceSlot.id) && <span className="bonus-tag" title="Bonus game — pays 1.5x if finished">⭐</span>}</span>
+          <span>⚔️ {player.forceSlot.game}{isBonus(player.forceSlot.id) && <span className="bonus-tag" title="Bonus game: Pays 1.5x if finished">⭐</span>}</span>
           <button onClick={() => onAddToLobby(player.forceSlot.id)} disabled={addDisabled}>Add to Lobby</button>
         </div>
       )}
@@ -20,7 +20,7 @@ export default function InventoryList({ player, onAddToLobby, hasLobbyEntry, bus
         </div>
       ))}
       {hasLobbyEntry && !empty && (
-        <p className="empty">You already have a game in the Lobby — finish or return it there first.</p>
+        <p className="empty">You already have a game in the Lobby.</p>
       )}
     </section>
   )

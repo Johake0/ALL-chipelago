@@ -155,13 +155,18 @@ function AuctionSession({ session, me, players, onBid, onFinalize, busy }) {
 }
 
 function ActiveSession({ session, lobby, players }) {
-  const stillPlayingIds = new Set(lobby.filter((item) => session.memberUserIds.includes(item.ownerId)).map((item) => item.ownerId))
+  // A member who's finished/released still has a row in `lobby` now (kept
+  // visible in stasis with a ✅/❌ instead of vanishing — see Lobby.jsx), so
+  // "still playing" has to check playState, not just presence in the array.
+  const stillPlayingIds = new Set(
+    lobby.filter((item) => session.memberUserIds.includes(item.ownerId) && item.playState === 'playing').map((item) => item.ownerId)
+  )
   const doneCount = session.memberUserIds.length - stillPlayingIds.size
   const waitingOn = session.memberUserIds.filter((id) => stillPlayingIds.has(id)).map((id) => nameFor(players, id))
 
   return (
     <p className="lobby-hint">
-      Session in progress — {doneCount}/{session.memberUserIds.length} players done.
+      Session in progress — {doneCount}/{session.memberUserIds.length} players are done.
       {waitingOn.length > 0 && ` Still waiting on ${waitingOn.join(', ')}.`}
     </p>
   )

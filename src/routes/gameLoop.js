@@ -111,7 +111,15 @@ router.get('/state', requirePlayerSecret, async (req, res, next) => {
     // Shared lobby — every player's currently-in-progress-together game,
     // visible site-wide (not scoped to the requesting player) since it's a
     // shared "who's playing what right now" area for a 2-4 player session.
-    const lobbyGames = await Game.find({ status: 'lobby' }).populate('ownerId', 'username').lean();
+    // Also includes Session members who've already finished/released their
+    // own game but whose Session hasn't closed yet (still sessionPending) —
+    // kept visible with playState so the group can see who's still holding
+    // things up, instead of a member's row just vanishing the moment they
+    // act. Ungrouped (non-Session) finishes/releases still leave 'lobby'
+    // immediately as before, since sessionPending never gets set for them.
+    const lobbyGames = await Game.find({
+      $or: [{ status: 'lobby' }, { status: 'finished', sessionPending: true }]
+    }).populate('ownerId', 'username').lean();
     const lobby = lobbyGames.map((g) => ({
       id: g._id,
       game: g.name,
@@ -119,7 +127,8 @@ router.get('/state', requirePlayerSecret, async (req, res, next) => {
       ownerName: g.ownerId?.username,
       coinValue: g.coinValue,
       forceReleaseCost: g.forceReleaseCost,
-      auctionWon: g.auctionWon
+      auctionWon: g.auctionWon,
+      playState: g.status === 'lobby' ? 'playing' : (g.released ? 'released' : 'finished')
     }));
 
     // Session/Auction — null when no session is pending/active. The client
@@ -191,6 +200,7 @@ router.post('/spin', requirePlayerSecret, async (req, res, next) => {
     const winner = candidates[Math.floor(Math.random() * candidates.length)];
     winner.status = 'in_inventory';
     winner.ownerId = user._id;
+    winner.assignedToId = user._id;
     winner.claimMethod = 'wheel';
     winner.dateAssigned = new Date();
     await winner.save();
@@ -227,6 +237,7 @@ router.post('/claim-interest', requirePlayerSecret, async (req, res, next) => {
 
     game.status = 'in_inventory';
     game.ownerId = user._id;
+    game.assignedToId = user._id;
     game.claimMethod = 'interest';
     game.dateAssigned = new Date();
     await game.save();
@@ -467,9 +478,14 @@ router.post('/force', requirePlayerSecret, async (req, res, next) => {
 // and it costs the same coins as forcing that copy would — deducted the
 // same way force is. Releasing from 'lobby' status is allowed, deliberately
 // — see CLAUDE.md's Lobby note — even for a game that's part of an active
-// Session; a released game earns nothing so there's no sessionPending to
-// set, but it still needs to release its slot for closeSessionIfDone's
-// "is anyone still playing" check.
+// Session. A released game earns nothing, so sessionPending has no effect
+// on its coins/streak (computeUserStats checks `released` first and never
+// even looks at sessionPending for it) — but it's still set here anyway,
+// for the same "stasis" reasons a finished session game needs it:
+// inventoryCountForUser keeps counting it toward the hold cap, and the
+// Lobby stays showing it (with a ❌) instead of it vanishing, both until
+// closeSessionIfDone's "is anyone still playing" check clears the whole
+// Session at once.
 // ---------------------------------------------------------------------
 router.post('/release', requirePlayerSecret, async (req, res, next) => {
   const mongoSession = await mongoose.startSession();
@@ -494,6 +510,7 @@ router.post('/release', requirePlayerSecret, async (req, res, next) => {
       game.status = 'finished';
       game.released = true;
       game.dateCompleted = new Date();
+      if (sessionId) game.sessionPending = true;
       await game.save({ session: mongoSession });
 
       await Trade.create(
@@ -566,9 +583,15 @@ router.get('/activity', requirePlayerSecret, async (req, res, next) => {
     const LIMIT = 50;
 
     const [assignedGames, finishedGames, trades] = await Promise.all([
-      Game.find({ dateAssigned: { $ne: null } }).sort({ dateAssigned: -1 }).limit(LIMIT).populate('ownerId', 'username').lean(),
-      Game.find({ status: 'finished', released: false }).sort({ dateCompleted: -1 }).limit(LIMIT).populate('ownerId', 'username').lean(),
-      Trade.find({ type: { $in: ['trade', 'force', 'release', 'reroll'] } })
+      Game.find({ dateAssigned: { $ne: null } }).sort({ dateAssigned: -1 }).limit(LIMIT).populate('assignedToId', 'username').lean(),
+      // sessionPending: false — a finish inside a still-open Session has its
+      // coins held back (see computeUserStats), so the feed holds the event
+      // back too rather than showing "+coins" before they're actually
+      // available. It appears the moment closeSessionIfDone clears the
+      // flag, still carrying its real dateCompleted, so it lands in correct
+      // chronological order once revealed rather than jumping the queue.
+      Game.find({ status: 'finished', released: false, sessionPending: false }).sort({ dateCompleted: -1 }).limit(LIMIT).populate('ownerId', 'username').lean(),
+      Trade.find({ type: { $in: ['trade', 'force', 'release', 'reroll', 'auction'] } })
         .sort({ createdAt: -1 })
         .limit(LIMIT)
         .populate('fromUserId', 'username')
@@ -581,11 +604,16 @@ router.get('/activity', requirePlayerSecret, async (req, res, next) => {
     const events = [];
 
     for (const g of assignedGames) {
-      if (!g.ownerId) continue;
+      // assignedToId is who actually won it (immutable) — NOT g.ownerId,
+      // which mutates on trade/force and would silently relabel this event
+      // with the game's current holder. Also skips games spun/claimed
+      // before this field existed (assignedToId wasn't backfilled), rather
+      // than show a wrong actor for them.
+      if (!g.assignedToId) continue;
       events.push({
         type: g.claimMethod === 'interest' ? 'interest' : 'spin',
         at: g.dateAssigned,
-        actor: g.ownerId.username,
+        actor: g.assignedToId.username,
         game: g.name
       });
     }
@@ -620,7 +648,7 @@ router.get('/activity', requirePlayerSecret, async (req, res, next) => {
           targetGame: t.gameIdTo?.name
         });
       } else {
-        // force/release/reroll all share the same one-directional shape
+        // force/release/reroll/auction all share the same one-directional shape
         events.push({
           type: t.type,
           at: t.createdAt,
@@ -653,7 +681,7 @@ router.post('/reset', async (req, res, next) => {
       {
         $set: {
           status: 'available', ownerId: null, forcedByUserId: null, claimMethod: null, released: false,
-          dateAssigned: null, dateCompleted: null, bonusOnComplete: false,
+          dateAssigned: null, dateCompleted: null, bonusOnComplete: false, assignedToId: null,
           sessionId: null, sessionPending: false, auctionWon: false
         }
       }

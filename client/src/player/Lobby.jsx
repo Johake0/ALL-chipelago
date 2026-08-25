@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 // finish a game.
 const CONFIRM_TIMEOUT_MS = 5000
 
-export default function Lobby({ lobby, me, onComplete, onReturn, onRelease, busy }) {
+export default function Lobby({ lobby, me, players, onComplete, onReturn, onRelease, busy }) {
   const [confirmingId, setConfirmingId] = useState('')
   const [releaseTarget, setReleaseTarget] = useState(null)
   const timeoutRef = useRef(null)
@@ -39,16 +39,28 @@ export default function Lobby({ lobby, me, onComplete, onReturn, onRelease, busy
   return (
     <section className="panel lobby-panel">
       <h2>Lobby</h2>
-      <p className="lobby-hint">2-4 players can each drop one game in here to play together. Mark finished when done at it will be added to your trophy case.</p>
+      <p className="lobby-hint">
+        2-4 players can each drop one game in here to play together. Once a Session locks in, everyone
+        stays visible here. Games are marked as Finished ✅ or Released ❌ until all are done.
+      </p>
       {lobby.length === 0 && <p className="empty">Nobody's in the lobby right now. Add a game from your hold to start a session.</p>}
       {lobby.map((item) => {
         const mine = item.ownerId === me.id
         const confirming = confirmingId === item.id
-        const isBonus = mine && item.id === me.bonusGameId
+        const owner = mine ? me : players?.find((p) => p.id === item.ownerId)
+        const isBonus = item.id === owner?.bonusGameId
+        const playing = item.playState === 'playing'
         return (
-          <div className={`hold-row lobby-row${isBonus ? ' bonus-row' : ''}`} key={item.id}>
-            <span>🎮 {item.game}{isBonus && <span className="bonus-tag" title="Bonus game — pays 1.5x if finished">⭐</span>}{item.auctionWon && <span className="auction-tag" title="Won in this session's Auction">🔨</span>} <span className="lobby-owner">— {mine ? 'you' : item.ownerName}</span></span>
-            {mine && (
+          <div className={`hold-row lobby-row${isBonus ? ' bonus-row' : ''}${playing ? '' : ' lobby-row-done'}`} key={item.id}>
+            <span>
+              {playing ? '🎮' : item.playState === 'released' ? '❌' : '✅'} {item.game}
+              {isBonus && (
+                <span className="bonus-tag" title={`Bonus game for ${mine ? 'you' : item.ownerName}: Pays 1.5x if finished`}>⭐</span>
+              )}
+              {item.auctionWon && <span className="auction-tag" title="Won in this session's Auction">🔨</span>}
+              {' '}<span className="lobby-owner">— {mine ? 'you' : item.ownerName}{!playing ? (item.playState === 'released' ? ' (released, waiting on the rest of the group)' : ' (done, waiting on the rest of the group)') : ''}</span>
+            </span>
+            {mine && playing && (
               <div className="lobby-actions">
                 <button
                   type="button"

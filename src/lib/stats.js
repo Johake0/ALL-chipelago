@@ -60,6 +60,10 @@ export async function computeUserStats(userId) {
       // sessionPending (src/lib/sessionAuction.js), this same game is
       // picked up on the very next read, in its correct chronological spot,
       // same as any other change to this loop applying retroactively.
+      // (sessionPending also gets set on a *released* Session game now, for
+      // inventoryCountForUser's hold-capacity check and the Lobby's stasis
+      // display — but that never reaches this branch, since `released` is
+      // checked first above, so it has no effect on coins/streak either way.)
     } else {
       streak += 1;
       if (streak > longestStreak) longestStreak = streak;
@@ -112,9 +116,17 @@ export async function inventoryCountForUser(userId) {
   // committed to, just displayed in a different area while it's actively
   // being played. ('forced' is deliberately excluded, same as before: a
   // forced game is imposed outside the normal hold-cap flow.)
+  // Also counts finished/released games still sessionPending — i.e.
+  // finishing or releasing your own Session game doesn't free a hold slot
+  // (or let you spin again) until the whole Session actually closes, same
+  // "stasis" the Lobby display holds everyone in — see the Lobby & Sessions
+  // note in CLAUDE.md.
   return Game.countDocuments({
     ownerId: userId,
-    status: { $in: ['in_inventory', 'lobby'] }
+    $or: [
+      { status: { $in: ['in_inventory', 'lobby'] } },
+      { status: 'finished', sessionPending: true }
+    ]
   });
 }
 

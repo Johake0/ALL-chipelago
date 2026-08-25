@@ -143,21 +143,31 @@ function PlayerHome() {
             <button type="button" className={view === 'activity' ? 'active' : ''} onClick={() => setView('activity')}>Activity Feed</button>
           </nav>
 
+          {/* Kept permanently mounted (visibility toggled via CSS) rather
+              than conditionally rendered like the rest of the "game" view
+              below — unmounting/remounting Wheel replays its flicker
+              animation on every mount regardless of whether spinToken
+              actually just changed, since a fresh mount always runs
+              effects once. Switching tabs away and back was re-triggering
+              that animation on stale spinToken/winner values left over
+              from your last real spin. */}
+          <div style={view === 'activity' ? { display: 'none' } : undefined}>
+            <Wheel
+              segments={wheelSegments}
+              spinToken={spinToken}
+              winner={winner}
+              spinning={spinLocked}
+              disabled={me.inventoryFull || state.games.length === 0}
+              disabledReason={me.inventoryFull ? 'Your hold is full.' : state.games.length === 0 ? 'No games left in the pool.' : ''}
+              onSpin={handleSpin}
+              onLanded={handleWheelLanded}
+            />
+          </div>
+
           {view === 'activity' ? (
             <Activity />
           ) : (
             <>
-              <Wheel
-                segments={wheelSegments}
-                spinToken={spinToken}
-                winner={winner}
-                spinning={spinLocked}
-                disabled={me.inventoryFull || state.games.length === 0}
-                disabledReason={me.inventoryFull ? 'Your hold is full.' : state.games.length === 0 ? 'No games left in the pool.' : ''}
-                onSpin={handleSpin}
-                onLanded={handleWheelLanded}
-              />
-
               {status && <p className="status-msg">{status}</p>}
 
               <div className="panel-grid">
@@ -171,7 +181,7 @@ function PlayerHome() {
                   onFinalize={handleFinalizeBid}
                   busy={busy}
                 />
-                <Lobby lobby={state.lobby} me={me} onComplete={handleComplete} onReturn={handleReturnFromLobby} onRelease={handleRelease} busy={busy} />
+                <Lobby lobby={state.lobby} me={me} players={state.players} onComplete={handleComplete} onReturn={handleReturnFromLobby} onRelease={handleRelease} busy={busy} />
                 <InventoryList player={me} onAddToLobby={handleAddToLobby} hasLobbyEntry={!!myLobbyEntry} busy={busy} />
               </div>
 

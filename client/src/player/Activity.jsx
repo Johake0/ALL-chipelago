@@ -10,7 +10,8 @@ const ICONS = {
   release: '🏳️',
   force: '⚔️',
   trade: '🔁',
-  reroll: '🎲'
+  reroll: '🎲',
+  auction: '🔨'
 }
 
 function describe(event) {
@@ -22,6 +23,7 @@ function describe(event) {
     case 'force': return `${event.actor} forced ${event.game} onto ${event.target} (-🪙 ${event.coinCost}).`
     case 'trade': return `${event.actor} and ${event.target} traded ${event.game} for ${event.targetGame}.`
     case 'reroll': return `${event.actor} rerolled ${event.game} back into the pool (-🪙 ${event.coinCost}).`
+    case 'auction': return `${event.actor} won ${event.game} in the Session auction (-🪙 ${event.coinCost}).`
     default: return ''
   }
 }

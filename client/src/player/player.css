@@ -410,6 +410,10 @@
   flex-wrap: wrap;
 }
 
+.lobby-row-done {
+  opacity: 0.55;
+}
+
 .lobby-owner {
   color: var(--text-dim);
   font-size: 12px;

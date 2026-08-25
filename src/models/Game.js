@@ -49,6 +49,18 @@ const gameSchema = new mongoose.Schema(
     dateAssigned: { type: Date, default: null },
     dateCompleted: { type: Date, default: null },
 
+    // Who actually won this copy via /api/spin or /api/claim-interest, set
+    // once at that moment and never touched again — an immutable pairing
+    // with dateAssigned. ownerId is NOT safe to use for this: it mutates on
+    // /api/trade and /api/force, so a game's "spin"/"interest" activity-feed
+    // entry would silently relabel itself with whoever holds the game now
+    // instead of who actually won it, while still showing the original
+    // (correct) dateAssigned timestamp next to the wrong name. Same fix
+    // shape as bonusOnComplete above: snapshot the fact when it becomes
+    // true instead of re-deriving history from a field that changes later
+    // for unrelated reasons.
+    assignedToId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+
     // True iff this copy was the owner's flagged bonus game (User.bonusGameId)
     // at the exact moment /api/complete ran — set permanently then, since the
     // flag itself is mutable and can move to a different game before payout
