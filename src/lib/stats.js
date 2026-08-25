@@ -36,18 +36,17 @@ const MILESTONE_STEP = 20;
  * player's coin total will jump the first time this runs against their
  * existing completions, not just on future ones.
  */
-export async function computeUserStats(userId) {
-  const [history, coinCosts, giftsReceived] = await Promise.all([
-    Game.find({ ownerId: userId, status: 'finished' }).sort({ dateCompleted: 1 }).lean(),
-    // Gifts sent are subtracted the same way force/release/reroll/auction
-    // costs are — fromUserId paid coinCost to make this happen either way.
-    Trade.find({ type: { $in: ['force', 'release', 'reroll', 'gift', 'auction'] }, fromUserId: userId }).lean(),
-    Trade.find({ type: 'gift', toUserId: userId }).lean()
-  ]);
+// Shared walk over a user's finished-game history — both computeUserStats
+// (totals only) and gamePayoutBreakdown (the activity feed's per-game
+// coin math) need the exact same streak/bonus/milestone logic applied in
+// the same order, so this is the one place that logic lives.
+async function walkHistory(userId) {
+  const history = await Game.find({ ownerId: userId, status: 'finished' }).sort({ dateCompleted: 1 }).lean();
 
   let totalEarned = 0;
   let streak = 0;
   let longestStreak = 0;
+  const perGame = new Map();
 
   for (const game of history) {
     if (game.released) {
@@ -68,16 +67,43 @@ export async function computeUserStats(userId) {
       streak += 1;
       if (streak > longestStreak) longestStreak = streak;
 
+      const base = game.coinValue || 0;
       const multiplier = 1 + STREAK_MULTIPLIER_RATE * Math.min(streak, STREAK_MULTIPLIER_CAP);
-      const bonusFactor = game.bonusOnComplete ? BONUS_MULTIPLIER : 1;
-      totalEarned += Math.round((game.coinValue || 0) * multiplier * bonusFactor);
+      const bonusApplied = !!game.bonusOnComplete;
+      const bonusFactor = bonusApplied ? BONUS_MULTIPLIER : 1;
+      // streakBonus is a display-only decomposition of the multiplier into
+      // an additive "extra coins from streak" line (e.g. 200 base @ 1.25x
+      // -> +50 streak bonus) — the real payout below is still computed the
+      // original way (one Math.round over the combined multiplier), so this
+      // can differ from the real payout by up to a coin on odd coinValues.
+      const streakBonus = Math.round(base * multiplier) - base;
+      const payout = Math.round(base * multiplier * bonusFactor);
 
+      let milestoneBonus = 0;
       if (streak % MILESTONE_INTERVAL === 0) {
         const milestoneNumber = streak / MILESTONE_INTERVAL;
-        totalEarned += MILESTONE_BASE + MILESTONE_STEP * (milestoneNumber - 1);
+        milestoneBonus = MILESTONE_BASE + MILESTONE_STEP * (milestoneNumber - 1);
       }
+
+      const total = payout + milestoneBonus;
+      totalEarned += total;
+      perGame.set(String(game._id), { streak, base, streakBonus, bonusApplied, milestoneBonus, total });
     }
   }
+
+  return { totalEarned, streak, longestStreak, perGame };
+}
+
+export async function computeUserStats(userId) {
+  const [walked, coinCosts, giftsReceived] = await Promise.all([
+    walkHistory(userId),
+    // Gifts sent are subtracted the same way force/release/reroll/auction
+    // costs are — fromUserId paid coinCost to make this happen either way.
+    Trade.find({ type: { $in: ['force', 'release', 'reroll', 'gift', 'auction'] }, fromUserId: userId }).lean(),
+    Trade.find({ type: 'gift', toUserId: userId }).lean()
+  ]);
+
+  const { totalEarned, streak, longestStreak } = walked;
 
   // totalEarned is a pure lifetime-earnings figure (leaderboard "coins
   // earned" bragging stat) — it only ever grows, unaffected by spending or
@@ -90,6 +116,15 @@ export async function computeUserStats(userId) {
   const coins = totalEarned - spent + received;
 
   return { coins, streak, longestStreak, totalEarned };
+}
+
+// Per-game coin breakdown (streak bonus, milestone, bonus-game multiplier)
+// for the activity feed's "why did this payout come to X coins" display.
+// Keyed by game id string; only contains real (non-released, non-pending)
+// completions, since those are the only ones that ever paid out.
+export async function gamePayoutBreakdown(userId) {
+  const { perGame } = await walkHistory(userId);
+  return perGame;
 }
 
 export async function rerollsUsedForUser(userId) {

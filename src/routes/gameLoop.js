@@ -4,7 +4,7 @@ import Game from '../models/Game.js';
 import User from '../models/User.js';
 import Trade from '../models/Trade.js';
 import Session from '../models/Session.js';
-import { computeUserStats, inventoryCountForUser, freeClaimsUsedForUser, rerollsUsedForUser, rerollCost, timesForcedForUser, LIMITS } from '../lib/stats.js';
+import { computeUserStats, inventoryCountForUser, freeClaimsUsedForUser, rerollsUsedForUser, rerollCost, timesForcedForUser, gamePayoutBreakdown, LIMITS } from '../lib/stats.js';
 import { maybeRerollOnHoldRefill, currentBonusGame } from '../lib/bonusGame.js';
 import { resolveStaleAuction, closeSessionIfDone } from '../lib/sessionAuction.js';
 
@@ -601,6 +601,14 @@ router.get('/activity', requirePlayerSecret, async (req, res, next) => {
         .lean()
     ]);
 
+    // Coin breakdown for finish events is derived per-owner (the walk is a
+    // per-user streak reconstruction, same as computeUserStats), so batch
+    // it to one walk per distinct owner rather than one per finished game.
+    const ownerIds = [...new Set(finishedGames.filter((g) => g.ownerId).map((g) => String(g.ownerId._id)))];
+    const breakdownsByOwner = new Map(
+      await Promise.all(ownerIds.map(async (id) => [id, await gamePayoutBreakdown(id)]))
+    );
+
     const events = [];
 
     for (const g of assignedGames) {
@@ -620,12 +628,14 @@ router.get('/activity', requirePlayerSecret, async (req, res, next) => {
 
     for (const g of finishedGames) {
       if (!g.ownerId) continue;
+      const breakdown = breakdownsByOwner.get(String(g.ownerId._id))?.get(String(g._id));
       events.push({
         type: 'finish',
         at: g.dateCompleted,
         actor: g.ownerId.username,
         game: g.name,
-        coinValue: g.coinValue
+        coinValue: g.coinValue,
+        breakdown: breakdown || null
       });
     }
 

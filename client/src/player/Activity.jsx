@@ -18,7 +18,7 @@ function describe(event) {
   switch (event.type) {
     case 'spin': return `${event.actor} won ${event.game} from the wheel.`
     case 'interest': return `${event.actor} claimed ${event.game} as a free pick.`
-    case 'finish': return `${event.actor} finished ${event.game} (+🪙 ${event.coinValue}).`
+    case 'finish': return `${event.actor} finished ${event.game} (+🪙 ${event.breakdown ? event.breakdown.total : event.coinValue}).`
     case 'release': return `${event.actor} released ${event.game} (-🪙 ${event.coinCost}).`
     case 'force': return `${event.actor} forced ${event.game} onto ${event.target} (-🪙 ${event.coinCost}).`
     case 'trade': return `${event.actor} and ${event.target} traded ${event.game} for ${event.targetGame}.`
@@ -26,6 +26,19 @@ function describe(event) {
     case 'auction': return `${event.actor} won ${event.game} in the Session auction (-🪙 ${event.coinCost}).`
     default: return ''
   }
+}
+
+// Hover-only detail for a finish event — the full coin-math breakdown lives
+// here instead of in describe() so the feed line itself stays scannable.
+function detailFor(event) {
+  if (event.type !== 'finish' || !event.breakdown) return undefined
+  const b = event.breakdown
+  const parts = [`${b.base} (Base)`]
+  if (b.streakBonus > 0) parts.push(`${b.streakBonus} (Streak)`)
+  let core = parts.join(' + ')
+  if (b.bonusApplied) core = `(${core}) × 1.5 (Bonus Game)`
+  if (b.milestoneBonus > 0) core += ` + ${b.milestoneBonus} (${b.streak} Game Streak)`
+  return `Coins gained: ${core} = 🪙${b.total}`
 }
 
 export default function Activity() {
@@ -61,7 +74,7 @@ export default function Activity() {
       {error && <p className="cost-bad">{error}</p>}
       {events.length === 0 && !error && <p className="empty">Nothing's happened yet.</p>}
       {events.map((e) => (
-        <div className="hold-row activity-row" key={`${e.type}-${e.at}-${e.game}`}>
+        <div className="hold-row activity-row" key={`${e.type}-${e.at}-${e.game}`} title={detailFor(e)}>
           <span>{ICONS[e.type] || '•'} {describe(e)}</span>
         </div>
       ))}
