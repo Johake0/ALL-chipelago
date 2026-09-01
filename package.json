@@ -2,20 +2,25 @@
   "name": "archipelago-randomizer-api",
   "version": "1.0.0",
   "description": "Node/Express/MongoDB backend for the Archipelago randomizer wheel — replaces the Google Apps Script backend.",
+  "license": "MIT",
   "type": "module",
   "main": "src/server.js",
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "seed": "node scripts/importFromSheet.js"
+    "seed": "node scripts/importFromSheet.js",
+    "seed:catalog": "node scripts/seedCatalog.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "express-rate-limit": "^8.7.0",
     "mongodb": "^7.5.0",
     "mongoose": "^8.5.0",
+    "morgan": "^1.12.0",
     "multer": "^2.0.1",
+    "ws": "^8.21.3",
     "xlsx": "^0.18.5"
   }
 }

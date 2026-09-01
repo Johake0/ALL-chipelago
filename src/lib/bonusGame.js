@@ -1,15 +1,18 @@
 import Game from '../models/Game.js';
 import User from '../models/User.js';
+import { envNumber } from './env.js';
 
-export const BONUS_MULTIPLIER = 1.5;
-const WEIGHT_RATE = 0.5;
-const WEIGHT_CAP = 4;
+export const BONUS_MULTIPLIER = envNumber('BONUS_MULTIPLIER', 1.5);
+const WEIGHT_RATE = envNumber('BONUS_WEIGHT_RATE', 0.5);
+const WEIGHT_CAP = envNumber('BONUS_WEIGHT_CAP', 4);
 // Same statuses inventoryCountForUser's 'lobby' inclusion covers, plus
 // 'forced' — a bonus flag should follow a game through its whole held
 // lifecycle, including while it's sitting in the shared Lobby.
 export const HELD_STATUSES = ['in_inventory', 'forced', 'lobby'];
-// Trigger (a)'s threshold — see maybeRerollOnHoldRefill.
-const REFILL_THRESHOLD = 9;
+// Trigger (a)'s threshold — see maybeRerollOnHoldRefill. Overridable, but
+// should generally track INVENTORY_SIZE (stats.js) for a forked catalog
+// that changes hold size — see .env.example.
+const REFILL_THRESHOLD = envNumber('BONUS_REFILL_THRESHOLD', 9);
 
 // Runs the weighted lottery among userId's currently held games and stores
 // the winner on User.bonusGameId. Weight per game grows with how many of the

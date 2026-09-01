@@ -1,0 +1,10 @@
+{
+  "players": ["Alice", "Bob", "Charlie", "Dana"],
+  "games": [
+    { "name": "A Link to the Past", "coinValue": 150 },
+    { "name": "Super Metroid", "coinValue": 150 },
+    { "name": "Ocarina of Time", "coinValue": 300 },
+    { "name": "Timespinner", "coinValue": 100 },
+    { "name": "Stardew Valley", "coinValue": 200 }
+  ]
+}

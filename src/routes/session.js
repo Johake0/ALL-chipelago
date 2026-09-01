@@ -5,11 +5,16 @@ import Session from '../models/Session.js';
 import Trade from '../models/Trade.js';
 import { requirePlayerSecret } from './gameLoop.js';
 import { resolveAuctionNoInterest } from '../lib/sessionAuction.js';
+import { envNumber } from '../lib/env.js';
+import { broadcastStateChanged } from '../lib/liveUpdates.js';
 
 const router = express.Router();
 
 const RAMP_STEP = 10;
 const RAMP_CAP = 100;
+// Minimum ready Lobby members required to lock a session in — a session of
+// 1 is meaningless in practice (see CLAUDE.md's session lifecycle notes).
+const MIN_SESSION_SIZE = envNumber('MIN_SESSION_SIZE', 2);
 
 function idsEqual(a, b) {
   return String(a) === String(b);
@@ -50,7 +55,7 @@ router.post('/session/ready', requirePlayerSecret, async (req, res, next) => {
       const lobbyMembers = await Game.find({ status: 'lobby' }).session(mongoSession);
       const memberIds = lobbyMembers.map((g) => g.ownerId);
       const readySet = new Set(dbSession.readyUserIds.map(String));
-      const allReady = memberIds.length >= 2 && memberIds.every((id) => readySet.has(String(id)));
+      const allReady = memberIds.length >= MIN_SESSION_SIZE && memberIds.every((id) => readySet.has(String(id)));
 
       if (allReady) {
         dbSession.memberUserIds = memberIds;
@@ -89,6 +94,7 @@ router.post('/session/ready', requirePlayerSecret, async (req, res, next) => {
       result = { ok: true, locked: allReady };
     });
 
+    broadcastStateChanged();
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -160,6 +166,7 @@ router.post('/session/bid', requirePlayerSecret, async (req, res, next) => {
 
     if (activeAfter.length === 0) {
       await resolveAuctionNoInterest(dbSession);
+      broadcastStateChanged();
       return res.json({ ok: true, resolved: 'no_interest' });
     }
 
@@ -182,6 +189,7 @@ router.post('/session/bid', requirePlayerSecret, async (req, res, next) => {
     // calls POST /api/session/finalize-bid.
 
     await dbSession.save();
+    broadcastStateChanged();
     res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -248,6 +256,7 @@ router.post('/session/finalize-bid', requirePlayerSecret, async (req, res, next)
       result = { ok: true, game: auctionGame.name, price: auction.currentMinimum };
     });
 
+    broadcastStateChanged();
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });

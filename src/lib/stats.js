@@ -1,28 +1,31 @@
 import Game from '../models/Game.js';
 import Trade from '../models/Trade.js';
 import { BONUS_MULTIPLIER } from './bonusGame.js';
+import { envNumber } from './env.js';
 
-const INVENTORY_SIZE = 10;
-const FREE_INTEREST_PICKS = 3;
-const FREE_REROLLS = 5;
-const REROLL_BASE_COST = 500;
-const REROLL_STEP = 150;
+const INVENTORY_SIZE = envNumber('INVENTORY_SIZE', 10);
+const FREE_INTEREST_PICKS = envNumber('FREE_INTEREST_PICKS', 3);
+const FREE_REROLLS = envNumber('FREE_REROLLS', 5);
+const REROLL_BASE_COST = envNumber('REROLL_BASE_COST', 500);
+const REROLL_STEP = envNumber('REROLL_STEP', 150);
 
 // Streak payout curve. Each real completion pays coinValue times a
 // multiplier that grows with the current streak (capped so a very long
 // streak can't inflate payouts without bound), and every MILESTONE_INTERVALth
 // consecutive completion pays a flat bonus on top that itself escalates —
 // the multiplier alone goes quiet past the cap, so this keeps a long streak
-// still meaningfully better than a short one. Calibrated against the real
-// catalog: avg coinValue ~206, avg forceReleaseCost ~824 (always exactly 4x
-// coinValue) — MILESTONE_BASE lands right around one average completion's
-// worth, so a milestone reads as "one free extra game" rather than an
-// arbitrary number.
-const STREAK_MULTIPLIER_RATE = 0.05;
-const STREAK_MULTIPLIER_CAP = 10;
-const MILESTONE_INTERVAL = 5;
-const MILESTONE_BASE = 200;
-const MILESTONE_STEP = 20;
+// still meaningfully better than a short one. Defaults below were
+// calibrated against this project's original catalog: avg coinValue ~206,
+// avg forceReleaseCost ~824 (always exactly 4x coinValue) — MILESTONE_BASE
+// lands right around one average completion's worth, so a milestone reads
+// as "one free extra game" rather than an arbitrary number. All of these
+// are overridable via env vars for a catalog with a different average
+// coinValue — see .env.example.
+const STREAK_MULTIPLIER_RATE = envNumber('STREAK_MULTIPLIER_RATE', 0.05);
+const STREAK_MULTIPLIER_CAP = envNumber('STREAK_MULTIPLIER_CAP', 10);
+const MILESTONE_INTERVAL = envNumber('MILESTONE_INTERVAL', 5);
+const MILESTONE_BASE = envNumber('MILESTONE_BASE', 200);
+const MILESTONE_STEP = envNumber('MILESTONE_STEP', 20);
 
 /**
  * Computes a user's coins, streak, and longest streak purely from their

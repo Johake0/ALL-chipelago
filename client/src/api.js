@@ -58,6 +58,15 @@ export function publicFetch(path, options = {}) {
   return request(path, options, { 'x-player-secret': getPlayerSecret() });
 }
 
+// The "state changed" doorbell socket (see src/lib/liveUpdates.js on the
+// backend) — same host/port as API_URL, just swapping the http(s) scheme
+// for ws(s). Auth happens over the first message instead of a query
+// string, so the player secret never ends up in a WS upgrade request URL
+// (which would otherwise get captured by the backend's request logging).
+export function liveUpdatesUrl() {
+  return API_URL.replace(/^http/, 'ws') + '/ws';
+}
+
 // Avatar images are served unauthenticated (see the backend route) since
 // <img> tags can't attach the secret header — this just builds the URL.
 // `version` (pass the user's updatedAt) busts the browser's HTTP cache —

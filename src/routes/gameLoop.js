@@ -1,5 +1,6 @@
 import express from 'express';
 import mongoose from 'mongoose';
+import rateLimit from 'express-rate-limit';
 import Game from '../models/Game.js';
 import User from '../models/User.js';
 import Trade from '../models/Trade.js';
@@ -7,8 +8,21 @@ import Session from '../models/Session.js';
 import { computeUserStats, inventoryCountForUser, freeClaimsUsedForUser, rerollsUsedForUser, rerollCost, timesForcedForUser, gamePayoutBreakdown, LIMITS } from '../lib/stats.js';
 import { maybeRerollOnHoldRefill, currentBonusGame } from '../lib/bonusGame.js';
 import { resolveStaleAuction, closeSessionIfDone } from '../lib/sessionAuction.js';
+import { envNumber } from '../lib/env.js';
+import { broadcastStateChanged } from '../lib/liveUpdates.js';
 
 const router = express.Router();
+
+// Tighter than the global limiter in server.js — this is the one fully
+// public (no secret required), byte-heavy route in the app (up to 3MB per
+// hit, see AVATAR_MAX_BYTES in admin.js), so it's the single easiest
+// target for a bot/scraper to run up bandwidth on for free.
+const avatarLimiter = rateLimit({
+  windowMs: envNumber('RATE_LIMIT_WINDOW_MS', 5 * 60 * 1000),
+  limit: envNumber('AVATAR_RATE_LIMIT_MAX', 30),
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 // Gates state/spin/complete/claim-interest/trade/force behind a shared
 // player passphrase — same speed-bump philosophy as ADMIN_SECRET, just for
@@ -30,12 +44,16 @@ export function requirePlayerSecret(req, res, next) {
 // <img> tags can't attach custom headers, and these are just friend-group
 // profile photos, not sensitive game state.
 // ---------------------------------------------------------------------
-router.get('/users/:id/avatar', async (req, res, next) => {
+router.get('/users/:id/avatar', avatarLimiter, async (req, res, next) => {
   try {
     const user = await User.findById(req.params.id).select('+avatar.data');
     if (!user?.avatar?.data) return res.status(404).end();
     res.set('Content-Type', user.avatar.contentType);
-    res.set('Cache-Control', 'public, max-age=300');
+    // Avatars rarely change, and the client already cache-busts via
+    // ?v=updatedAt whenever one actually does (see client/src/api.js) — so
+    // a long max-age only cuts legitimate repeat-fetch bandwidth, it never
+    // hides a real change.
+    res.set('Cache-Control', 'public, max-age=86400');
     res.send(user.avatar.data);
   } catch (err) {
     next(err);
@@ -207,6 +225,7 @@ router.post('/spin', requirePlayerSecret, async (req, res, next) => {
 
     await maybeRerollOnHoldRefill(userId, count, count + 1);
 
+    broadcastStateChanged();
     res.json({ winner: winner.name, winnerId: winner._id });
   } catch (err) {
     next(err);
@@ -244,6 +263,7 @@ router.post('/claim-interest', requirePlayerSecret, async (req, res, next) => {
 
     await maybeRerollOnHoldRefill(userId, count, count + 1);
 
+    broadcastStateChanged();
     res.json({ ok: true, game: game.name });
   } catch (err) {
     next(err);
@@ -284,6 +304,7 @@ router.post('/complete', requirePlayerSecret, async (req, res, next) => {
       result = { ok: true, game: game.name };
     });
 
+    broadcastStateChanged();
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -332,6 +353,7 @@ router.post('/lobby/add', requirePlayerSecret, async (req, res, next) => {
     game.status = 'lobby';
     await game.save();
 
+    broadcastStateChanged();
     res.json({ ok: true, game: game.name });
   } catch (err) {
     next(err);
@@ -360,6 +382,7 @@ router.post('/lobby/return', requirePlayerSecret, async (req, res, next) => {
 
     await Session.updateOne({ status: 'pending', readyUserIds: userId }, { $pull: { readyUserIds: userId } });
 
+    broadcastStateChanged();
     res.json({ ok: true, game: game.name });
   } catch (err) {
     next(err);
@@ -392,6 +415,7 @@ router.post('/trade', requirePlayerSecret, async (req, res, next) => {
       await Trade.create([{ type: 'trade', fromUserId: userId, toUserId: targetUserId, gameIdFrom: gameA._id, gameIdTo: gameB._id }], { session });
       result = { ok: true };
     });
+    broadcastStateChanged();
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -426,6 +450,7 @@ router.post('/gift', requirePlayerSecret, async (req, res, next) => {
 
     await Trade.create({ type: 'gift', fromUserId: userId, toUserId: targetUserId, coinCost: parsedAmount });
 
+    broadcastStateChanged();
     res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -465,6 +490,7 @@ router.post('/force', requirePlayerSecret, async (req, res, next) => {
 
     await Trade.create({ type: 'force', fromUserId: userId, toUserId: targetUserId, gameIdFrom: game._id, coinCost: game.forceReleaseCost });
 
+    broadcastStateChanged();
     res.json({ ok: true, game: game.name });
   } catch (err) {
     next(err);
@@ -523,6 +549,7 @@ router.post('/release', requirePlayerSecret, async (req, res, next) => {
       result = { ok: true, game: game.name };
     });
 
+    broadcastStateChanged();
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -563,6 +590,7 @@ router.post('/reroll', requirePlayerSecret, async (req, res, next) => {
 
     await Trade.create({ type: 'reroll', fromUserId: userId, toUserId: userId, gameIdFrom: game._id, coinCost: cost });
 
+    broadcastStateChanged();
     res.json({ ok: true, game: game.name, cost });
   } catch (err) {
     next(err);
@@ -699,6 +727,7 @@ router.post('/reset', async (req, res, next) => {
     await User.updateMany({}, { $set: { bonusGameId: null } });
     await Trade.deleteMany({});
     await Session.deleteMany({});
+    broadcastStateChanged();
     res.json({ ok: true });
   } catch (err) {
     next(err);

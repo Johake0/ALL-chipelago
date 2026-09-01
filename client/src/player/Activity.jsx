@@ -49,6 +49,10 @@ export default function Activity() {
     let cancelled = false
 
     async function load() {
+      // Same rationale as useGameState.js's tick(): a backgrounded tab
+      // shouldn't keep polling — this was the leading cause found for a
+      // real bandwidth spike (a PC left on with the site open overnight).
+      if (document.visibilityState === 'hidden') return
       try {
         const data = await getActivity()
         if (!cancelled) {
@@ -60,11 +64,17 @@ export default function Activity() {
       }
     }
 
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') load()
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
     load()
     const id = setInterval(load, POLL_MS)
     return () => {
       cancelled = true
       clearInterval(id)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [])
 

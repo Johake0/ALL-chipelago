@@ -7,6 +7,11 @@
 
 **All Games**-Archipelago. The purpose of this repo is to host our custom 'EveryWorld' system.
 
+> This is a self-hostable open-source template — any group can fork this
+> repo and deploy their own standalone instance (own hosting, own
+> database, own catalog) for free. It's not a shared service; each group
+> runs their own copy. See [SETUP.md](SETUP.md) to deploy your own.
+
   
 
   
