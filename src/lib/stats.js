@@ -154,17 +154,20 @@ export async function inventoryCountForUser(userId) {
   // committed to, just displayed in a different area while it's actively
   // being played. ('forced' is deliberately excluded, same as before: a
   // forced game is imposed outside the normal hold-cap flow.)
-  // Also counts finished/released games still sessionPending — i.e.
-  // finishing or releasing your own Session game doesn't free a hold slot
-  // (or let you spin again) until the whole Session actually closes, same
-  // "stasis" the Lobby display holds everyone in — see the Lobby & Sessions
-  // note in CLAUDE.md.
+  // Deliberately does NOT count finished/released games that are still
+  // sessionPending — once a player finishes or releases their own Session
+  // game, their hold slot frees up immediately so they can keep
+  // spinning/playing while waiting on the rest of the group, rather than
+  // being blocked until the whole Session closes. This is narrower than
+  // the Lobby's stasis display (which still shows a ✅/❌ entry for that
+  // game until the Session closes — see Lobby & Sessions in CLAUDE.md) and
+  // narrower than computeUserStats' sessionPending gating (coins/streak
+  // from that game are still held back until the Session closes) — only
+  // the hold-capacity count changed here, not when it's displayed or when
+  // it pays out.
   return Game.countDocuments({
     ownerId: userId,
-    $or: [
-      { status: { $in: ['in_inventory', 'lobby'] } },
-      { status: 'finished', sessionPending: true }
-    ]
+    status: { $in: ['in_inventory', 'lobby'] }
   });
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getActivity } from './playerApi.js'
+import { isPageActive } from '../pageActive.js'
 
 const POLL_MS = 15000
 
@@ -49,10 +50,11 @@ export default function Activity() {
     let cancelled = false
 
     async function load() {
-      // Same rationale as useGameState.js's tick(): a backgrounded tab
-      // shouldn't keep polling — this was the leading cause found for a
-      // real bandwidth spike (a PC left on with the site open overnight).
-      if (document.visibilityState === 'hidden') return
+      // Same rationale as useGameState.js's tick(): stop polling once
+      // nobody's actually looking at the tab — covers switching tabs,
+      // minimizing, and alt-tabbing to a different app while this window
+      // sits open (but unfocused) in the background. See pageActive.js.
+      if (!isPageActive()) return
       try {
         const data = await getActivity()
         if (!cancelled) {
@@ -64,17 +66,19 @@ export default function Activity() {
       }
     }
 
-    function handleVisibilityChange() {
-      if (document.visibilityState === 'visible') load()
+    function handleActivate() {
+      if (isPageActive()) load()
     }
 
-    document.addEventListener('visibilitychange', handleVisibilityChange)
+    document.addEventListener('visibilitychange', handleActivate)
+    window.addEventListener('focus', handleActivate)
     load()
     const id = setInterval(load, POLL_MS)
     return () => {
       cancelled = true
       clearInterval(id)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      document.removeEventListener('visibilitychange', handleActivate)
+      window.removeEventListener('focus', handleActivate)
     }
   }, [])
 

@@ -146,10 +146,71 @@ is about how the code implements it.
   hazard since the auction win needs to go through the exact same
   finish/release flow a normal Lobby entry does. `useGameState.js` polls
   every ~3s (instead of the usual 15s) while `session.auction.status ===
-  'open'`, chosen over WebSockets/SSE to avoid new infrastructure — see
-  "Resolved: does an Auction win let the winner 'double dip' on spins?"
-  below for the one piece of the original design this implementation
-  doesn't literally enforce (turned out not to need enforcing).
+  'open'` as a fallback path — see the Live Updates bullet below for the
+  primary mechanism, which replaced polling as the normal way updates
+  propagate. See "Resolved: does an Auction win let the winner 'double
+  dip' on spins?" below for the one piece of the original design this
+  implementation doesn't literally enforce (turned out not to need
+  enforcing).
+- **Lobby "stasis" display, separate from hold-capacity:** once a Session
+  locks in, a member's Lobby entry stays visible to everyone (with a ✅
+  finished / ❌ released indicator, via a `playState` field `GET
+  /api/state` computes per lobby item) until the *whole* Session closes —
+  this is deliberate so the group can see who's still playing rather than
+  entries vanishing one at a time. **This display-level stasis is
+  independent from `inventoryCountForUser`'s hold-capacity count**: a
+  finished/released Session game no longer occupies a hold slot once
+  *that player's own* game is done, even while the Session itself (and
+  their Lobby entry's ✅/❌) stays open waiting on the rest of the group.
+  Earlier versions of this app also blocked spinning until the whole
+  Session closed; that was relaxed because it meant players sat idle with
+  a full hold while waiting on slower groupmates, sometimes for long
+  enough that a newly-flagged Bonus Game wouldn't get a fair shot before
+  the situation moved on. `computeUserStats`' `sessionPending` gating
+  (coins/streak held back until the Session closes) is unaffected by
+  this — only *when a hold slot frees up* changed, not *when the reward
+  pays out* or *when the Lobby stops showing it*.
+- **Live Updates** (`src/lib/liveUpdates.js`): a WebSocket "doorbell," not
+  a data channel — every mutating route (`spin`, `claim-interest`,
+  `complete`, `lobby/add`, `lobby/return`, `trade`, `gift`, `force`,
+  `release`, `reroll`, `reset`, and the three `session.js` routes) calls
+  `broadcastStateChanged()` after it writes, which just tells connected
+  clients "something changed, go re-fetch" — it never carries the actual
+  state payload. `GET /api/state` stays the single source of truth;
+  `useGameState.js` refetches it the instant a broadcast arrives instead
+  of waiting on its poll timer. Auth happens over the client's *first
+  message* after connecting (`{type:'auth', secret}`), not a query
+  string — a query string would land in the request URL that `morgan`
+  now logs (see below), which would leak `PLAYER_SECRET` into Render's
+  logs; a browser `WebSocket` also can't send custom headers, so a
+  first-message handshake was the option that keeps the secret out of
+  anything logged. Polling stays as an automatic fallback (a long ~90s
+  safety-net interval while the socket is connected, back to the
+  original 15s/3s cadence if it isn't) — the socket is additive, never
+  load-bearing, so a blocked/failed WebSocket connection degrades
+  gracefully to exactly how this app always worked. Client-side, polling
+  (and the socket) also now pause entirely whenever the tab isn't both
+  visible *and* focused (`client/src/pageActive.js` — visibility alone
+  misses alt-tabbing to a different application while the browser window
+  stays open unfocused in the background) — added after a real Render
+  bandwidth-cap incident traced to a PC left on with the site open in an
+  unwatched background tab overnight.
+- **Request logging** (`morgan('combined')` in `src/server.js`): the app
+  previously logged nothing per-request at all. Render's Logs tab only
+  ever shows what a service prints to stdout/stderr, so without this
+  there was no way to tell legitimate traffic from abuse after the fact —
+  this is what actually diagnosed the bandwidth incident above as an open
+  tab rather than a bot.
+- **Rate limiting** (`express-rate-limit` in `src/server.js` and on `GET
+  /api/users/:id/avatar` specifically in `gameLoop.js`): a general guard
+  on every route plus a tighter one on the avatar route — the one fully
+  public, no-secret-required, byte-heavy (up to `AVATAR_MAX_BYTES`,
+  3MB) route in the app, so the easiest target for actual bot/scraper
+  abuse specifically (a different failure mode than the open-tab incident
+  above, worth keeping regardless of what caused any one bandwidth spike).
+  Thresholds and the avatar route's `Cache-Control` (raised from 5 minutes
+  to 1 day — the client already cache-busts on real changes via
+  `?v=updatedAt`) are all env-overridable — see `.env.example`.
 - **Activity Feed** (`GET /api/activity`) and **Leaderboard**: neither is
   a stored log/table — Activity is assembled on read by merging
   `Game.dateAssigned`/`dateCompleted` and the `Trade` collection (each
