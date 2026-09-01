@@ -7,6 +7,7 @@ import { requirePlayerSecret } from './gameLoop.js';
 import { resolveAuctionNoInterest } from '../lib/sessionAuction.js';
 import { envNumber } from '../lib/env.js';
 import { broadcastStateChanged } from '../lib/liveUpdates.js';
+import { getSettings } from '../lib/settings.js';
 
 const router = express.Router();
 
@@ -65,7 +66,10 @@ router.post('/session/ready', requirePlayerSecret, async (req, res, next) => {
           { session: mongoSession }
         );
 
-        const candidates = await Game.find({ status: 'available', removed: false }).session(mongoSession);
+        const { auctionEnabled } = await getSettings();
+        const candidates = auctionEnabled
+          ? await Game.find({ status: 'available', removed: false }).session(mongoSession)
+          : [];
         if (candidates.length > 0) {
           const auctionGame = candidates[Math.floor(Math.random() * candidates.length)];
           auctionGame.status = 'auctioning';

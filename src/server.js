@@ -13,6 +13,7 @@ import { attachLiveUpdates } from './lib/liveUpdates.js';
 import gameLoopRoutes from './routes/gameLoop.js';
 import adminRoutes from './routes/admin.js';
 import sessionRoutes from './routes/session.js';
+import playthroughRoutes from './routes/playthrough.js';
 
 const app = express();
 
@@ -29,7 +30,10 @@ app.set('trust proxy', 1);
 // actually hitting the API" was unanswerable after the fact.
 app.use(morgan('combined'));
 
-app.use(express.json());
+// Default (100kb) is tight enough to risk rejecting a New Playthrough
+// wizard confirm payload (selected games + roster) if most of a ~900-game
+// catalog gets picked — 1mb gives real headroom without removing the cap.
+app.use(express.json({ limit: '1mb' }));
 
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
 app.use(
@@ -54,6 +58,7 @@ app.use(
 app.use('/api', gameLoopRoutes);
 app.use('/api', adminRoutes);
 app.use('/api', sessionRoutes);
+app.use('/api', playthroughRoutes);
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 

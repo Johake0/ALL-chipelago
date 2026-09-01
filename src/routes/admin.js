@@ -19,7 +19,7 @@ const avatarUpload = multer({
   }
 });
 
-function requireAdmin(req, res, next) {
+export function requireAdmin(req, res, next) {
   if (req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
     return res.status(403).json({ error: 'Not authorized.' });
   }

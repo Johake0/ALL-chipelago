@@ -1,6 +1,7 @@
 import Game from '../models/Game.js';
 import User from '../models/User.js';
 import { envNumber } from './env.js';
+import { getSettings } from './settings.js';
 
 export const BONUS_MULTIPLIER = envNumber('BONUS_MULTIPLIER', 1.5);
 const WEIGHT_RATE = envNumber('BONUS_WEIGHT_RATE', 0.5);
@@ -22,6 +23,16 @@ const REFILL_THRESHOLD = envNumber('BONUS_REFILL_THRESHOLD', 9);
 // "staleness" equally). Capped at WEIGHT_CAP so a long-neglected game is
 // nudged toward, never guaranteed.
 export async function pickBonusGame(userId) {
+  // Single choke point for both reroll triggers (hold refill, via
+  // maybeRerollOnHoldRefill below, and an auction win, via
+  // closeSessionIfDone in sessionAuction.js) — disabling the feature here
+  // covers both without needing a separate check at each call site.
+  const { bonusGameEnabled } = await getSettings();
+  if (!bonusGameEnabled) {
+    await User.findByIdAndUpdate(userId, { bonusGameId: null });
+    return null;
+  }
+
   const [candidates, finished] = await Promise.all([
     Game.find({ ownerId: userId, status: { $in: HELD_STATUSES } }).lean(),
     Game.find({ ownerId: userId, status: 'finished' }).select('dateCompleted').lean()
@@ -71,6 +82,8 @@ export async function maybeRerollOnHoldRefill(userId, countBefore, countAfter) {
 // user actually still holds? Returns the Game doc or null. Used for both
 // display (GET /api/state) and the POST /api/complete payout check.
 export async function currentBonusGame(userId) {
+  const { bonusGameEnabled } = await getSettings();
+  if (!bonusGameEnabled) return null;
   const user = await User.findById(userId).select('bonusGameId').lean();
   if (!user?.bonusGameId) return null;
   return Game.findOne({ _id: user.bonusGameId, ownerId: userId, status: { $in: HELD_STATUSES } }).lean();

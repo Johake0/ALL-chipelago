@@ -92,3 +92,25 @@ export async function adminUploadAvatar(userId, file) {
   if (!res.ok) throw new Error(body?.error || `Request failed (${res.status})`);
   return body;
 }
+
+// New Playthrough wizard — parse step. Same "bypass request()'s forced
+// JSON Content-Type" reasoning as adminUploadAvatar above.
+export async function adminUploadPlaythroughXlsx(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch(`${API_URL}/api/playthrough/parse`, {
+    method: 'POST',
+    headers: { 'x-admin-secret': getAdminSecret() },
+    body: formData
+  });
+  const text = await res.text();
+  const body = text ? JSON.parse(text) : null;
+  if (!res.ok) throw new Error(body?.error || `Request failed (${res.status})`);
+  return body;
+}
+
+// New Playthrough wizard — confirm step. Plain JSON, goes through the
+// normal adminFetch helper.
+export function adminConfirmPlaythrough(payload) {
+  return adminFetch('/api/playthrough/confirm', { method: 'POST', body: JSON.stringify(payload) });
+}
